@@ -1,8 +1,8 @@
-import { Colors, type Theme } from "@/constants/theme";
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import type { Theme } from "@/constants/theme";
+import { useThemeContext } from "@/providers/ThemeProvider";
 
-/** Paper & Pine palette for the current color scheme. */
+/** Paper & Pine palette for the active scheme (system or the Settings
+ *  override). Must be used inside ThemeProvider (the root layout). */
 export function useTheme(): Theme {
-  const scheme = useColorScheme();
-  return Colors[scheme === "dark" ? "dark" : "light"];
+  return useThemeContext().colors;
 }
