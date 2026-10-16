@@ -649,15 +649,14 @@ export default function StatsScreen() {
     if (!recapReady || recapY == null) return;
     // After paint, so layout is settled before we scroll (web: rAF).
     const id = requestAnimationFrame(() => {
-      // recapY is measured inside the content container, but scrollTo takes
-      // a raw content offset whose 0 is the screen top on both platforms
-      // (iOS: automatic content insets rest at -insetTop; Android: the
-      // container pads by insetTop and the view runs under the status bar).
-      // Subtract the inset so the margin is kept below the safe area, and
-      // let iOS go as far up as its resting offset.
-      const minY = Platform.OS === "ios" ? -insetTop : 0;
+      // recapY is measured inside the content container, and scrollTo takes
+      // a content offset whose 0 is the screen top on both platforms: the
+      // view runs under the status bar, content insets are off, and the
+      // container pads by insetTop itself. Subtract the inset so the margin
+      // is kept below the safe area; 0 is the resting (fully scrolled up)
+      // offset.
       scrollRef.current?.scrollTo({
-        y: Math.max(minY, recapY - insetTop - RECAP_SCROLL_MARGIN),
+        y: Math.max(0, recapY - insetTop - RECAP_SCROLL_MARGIN),
         animated: true,
       });
       // Consume the link: setParams merges, and an undefined value reads
@@ -818,17 +817,27 @@ export default function StatsScreen() {
   // Membership is shared and cached; "no circle" is re-asked on focus and
   // foreground return (retryMembership) and a pull re-asks at once, so a
   // member added by the owner does not stay on the placeholder.
+  // Safe-area padding, the same for both lists below. Neither leans on
+  // react-native-screens' automatic content insets: on iOS 26 the tab
+  // screen gets none, which left the header under the clock and the last
+  // row under the tab bar. So insets are off (contentInsetAdjustmentBehavior
+  // "never") and the container pads them itself, as Today's root View does.
+  // Top: the status bar / Dynamic Island on both platforms. Bottom: on iOS
+  // the screen runs under the floating tab bar, so the home-indicator inset
+  // is added to the 40 of air; Android's tab bar sits below the screen
+  // (its SafeAreaView already clears it), so 40 alone.
+  const insetPad = {
+    paddingTop: insets.top,
+    paddingBottom: 40 + (Platform.OS === "ios" ? insets.bottom : 0),
+  };
+
   if (membership === null) {
     return (
       <ScrollView
         style={[styles.root, { backgroundColor: c.canvas }]}
-        // Same insets as the main list below, with iOS's automatic insets
-        // asked for outright rather than left to react-native-screens.
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={[
-          styles.placeholder,
-          { paddingTop: Platform.OS === "ios" ? 0 : insets.top },
-        ]}
+        // Same insets as the main list below (see insetPad).
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={[styles.placeholder, insetPad]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -857,13 +866,9 @@ export default function StatsScreen() {
       <ScrollView
         ref={scrollRef}
         style={[styles.root, { backgroundColor: c.canvas }]}
-        // Insets: on iOS react-native-screens flips the tab screen's first
-        // ScrollView to automatic content insets (status bar, tab bar), so
-        // the top is 0 and the bottom a fixed 40; Android pads the top itself.
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: Platform.OS === "ios" ? 0 : insets.top },
-        ]}
+        // Insets padded by the container, never by the system (see insetPad).
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={[styles.content, insetPad]}
         refreshControl={
           groupId ? (
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.muted} />
@@ -1054,7 +1059,8 @@ export default function StatsScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   placeholder: { flexGrow: 1 },
-  content: { paddingBottom: 40, paddingHorizontal: 20, gap: 16 },
+  // Top and bottom padding come from insetPad (safe area + 40 at the end).
+  content: { paddingHorizontal: 20, gap: 16 },
   // Web: pt-7 pb-3. The content gap (16) stands in for the bottom padding.
   header: { paddingTop: 28 },
   failed: { alignItems: "center", gap: 16 },

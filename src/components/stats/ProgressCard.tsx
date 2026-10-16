@@ -44,6 +44,7 @@ import {
 } from "@/lib/progress";
 
 import {
+  CHART_PRESS_CONFIG,
   ChartTooltip,
   integerTicks,
   PressCursorLine,
@@ -80,7 +81,10 @@ export function ProgressCard({ mode, tz, today, mushaf, rows }: ProgressCardProp
   return (
     <Card>
       <View style={styles.header}>
-        <Text style={[Type.callout, styles.semibold, { color: c.foreground }]}>
+        <Text
+          numberOfLines={1}
+          style={[Type.callout, styles.semibold, styles.title, { color: c.foreground }]}
+        >
           Where you are
         </Text>
         {both && (
@@ -209,6 +213,7 @@ function HifzView({
           ]}
           frame={{ lineWidth: 0 }}
           chartPressState={state}
+          chartPressConfig={CHART_PRESS_CONFIG}
           // Dots live outside the clip so the trailing "today" point and a
           // point on the top grid line keep their full circle (the web's
           // SVG let them overflow the plot area).
@@ -258,6 +263,7 @@ function HifzView({
         </CartesianChart>
         {pressed && point ? (
           <ChartTooltip
+            dot
             point={point}
             width={width}
             value={fmt(pressed.total)}
@@ -526,6 +532,7 @@ function ReadingView({
           ]}
           frame={{ lineWidth: 0 }}
           chartPressState={state}
+          chartPressConfig={CHART_PRESS_CONFIG}
           // Outside the clip: the "1 khatmah" label (its glyphs rise above
           // the line), the dots and the active dot at the chart edges.
           renderOutside={({ points, chartBounds, yScale }) => (
@@ -587,6 +594,7 @@ function ReadingView({
         {pressed && point ? (
           current ? (
             <ChartTooltip
+              dot
               point={point}
               width={width}
               value={`p.${pressed.v}`}
@@ -595,6 +603,7 @@ function ReadingView({
             />
           ) : (
             <ChartTooltip
+              dot
               point={point}
               width={width}
               value={pressed.v}
@@ -676,7 +685,12 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
-  toggle: { flexShrink: 0 },
+  // The title gives way first (one line, ellipsised) so the control keeps
+  // its full width. The segments split the track with flex 1 from a zero
+  // basis, so without a width the track sizes to nothing useful and the
+  // row cut "Reading" off at the card edge; 190 holds both 14pt labels.
+  title: { flexShrink: 1 },
+  toggle: { flexShrink: 0, width: 190 },
   semibold: { fontWeight: "600" },
   medium: { fontWeight: "500" },
   mt05: { marginTop: 2 },

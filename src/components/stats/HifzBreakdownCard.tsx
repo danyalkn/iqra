@@ -36,6 +36,7 @@ import { describeEntry } from "@/lib/format";
 import type { LogRow } from "@/lib/types";
 
 import {
+  CHART_PRESS_CONFIG,
   ChartTooltip,
   PressCursorBand,
   useChartColors,
@@ -241,6 +242,7 @@ function TypeBars({
           lineColor: colors.grid,
         }}
         chartPressState={state}
+        chartPressConfig={CHART_PRESS_CONFIG}
       >
         {({ points, chartBounds }) => {
           // Centre-to-centre distance: chartBounds includes the 12px side

@@ -17,6 +17,8 @@
  *     read the shared values on the UI thread, no re-render per move;
  *   - `<ChartTooltip point width ... />` sits in the same relative View as
  *     the chart, above the point, clamped to the chart width.
+ * Every `<CartesianChart>` also takes `chartPressConfig={CHART_PRESS_CONFIG}`
+ * so a vertical swipe that starts on a chart still scrolls the page.
  */
 import {
   Circle,
@@ -29,7 +31,11 @@ import { useCallback, useMemo, useState } from "react";
 import { Platform, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { useAnimatedReaction, useDerivedValue, type SharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
-import { useChartPressState, type ChartPressState } from "victory-native";
+import {
+  useChartPressState,
+  type ChartPressPanConfig,
+  type ChartPressState,
+} from "victory-native";
 
 import { Elevation, Radius, Type } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
@@ -110,6 +116,32 @@ export function integerTicks(max: number, count = 4): number[] {
 }
 
 // ── Press state ─────────────────────────────────────────────────────────────
+
+/**
+ * The press gesture every chart on the Insights tab uses. Hand it to each
+ * `<CartesianChart chartPressConfig>`; keep it the one place this is tuned.
+ *
+ * victory-native builds its press as an RNGH Pan raced into a detector over
+ * the whole canvas (no transform gesture here: no chart passes
+ * transformState). With no config it calls `activateAfterLongPress(100)`
+ * (its deprecated `gestureLongPressDelay` default); once `pan` is passed
+ * that default is skipped, so the 100 ms hold is restated here.
+ *
+ * - `activateAfterLongPress: 100`: the tooltip needs a 100 ms hold, so a
+ *   tap-and-go or a flick never opens it.
+ * - `failOffsetY: [-6, 6]`: before that hold completes, 6pt of vertical
+ *   travel fails the press outright, which hands the touch to the parent
+ *   ScrollView. RNGH's own long-press slop is a 10pt radius; failing on the
+ *   vertical axis first means a scroll is decided sooner and a slightly
+ *   diagonal flick cannot sit in the chart's gesture. Fail offsets only
+ *   apply before activation, so once the tooltip is up the finger can drag
+ *   anywhere (including up and down) and the press keeps tracking.
+ * No `simultaneousWithExternalGesture`: the press and the page scroll must
+ * never both run, the tooltip would drift as the page moved under it.
+ */
+export const CHART_PRESS_CONFIG: { pan: ChartPressPanConfig } = {
+  pan: { activateAfterLongPress: 100, failOffsetY: [-6, 6] },
+};
 
 /** The matched datum and its canvas position, in the chart View's frame. */
 export type PressPoint = { index: number; x: number; y: number };
@@ -230,9 +262,16 @@ export function PressDot({
 /**
  * The one tooltip style every chart on the page uses: value first. Ported
  * from the web's TooltipCard (rounded-xl border bg-surface px-3 py-2
- * shadow-e2). Absolutely positioned inside the chart's wrapper View, 8px
- * above the point, clamped so it never leaves the chart's width; it measures
+ * shadow-e2). Absolutely positioned inside the chart's wrapper View, above
+ * the point, clamped so it never leaves the chart's width; it measures
  * itself once and stays invisible until it has.
+ *
+ * Bars (the default) sit the card 8px above the bar top and clamp it to the
+ * top edge: a tall bar is covered at its top, which still reads. Line
+ * charts pass `dot` so the press dot stays visible: the card keeps
+ * DOT_CLEARANCE above the dot, and when that would leave the top of the
+ * chart (the point is too high for the card to fit above it), it flips to
+ * the same distance below the dot instead of clamping onto it.
  */
 export function ChartTooltip({
   point,
@@ -241,6 +280,7 @@ export function ChartTooltip({
   suffix,
   detail,
   label,
+  dot = false,
 }: {
   point: PressPoint | null;
   /** Width of the wrapper View (from `useLayoutWidth`). */
@@ -250,13 +290,21 @@ export function ChartTooltip({
   /** Optional second line under the value. */
   detail?: string;
   label: string;
+  /** Line charts: keep clear of the press dot (see above). */
+  dot?: boolean;
 }) {
   const c = useTheme();
   const [size, setSize] = useState({ w: 0, h: 0 });
   if (!point) return null;
 
   const left = Math.min(Math.max(point.x - size.w / 2, 0), Math.max(0, width - size.w));
-  const top = Math.max(0, point.y - size.h - 8);
+  let top: number;
+  if (dot) {
+    const above = point.y - DOT_CLEARANCE - size.h;
+    top = above >= 0 ? above : point.y + DOT_CLEARANCE;
+  } else {
+    top = Math.max(0, point.y - size.h - 8);
+  }
   const onLayout = (e: LayoutChangeEvent) => {
     const { width: w, height: h } = e.nativeEvent.layout;
     if (w !== size.w || h !== size.h) setSize({ w, h });
@@ -288,6 +336,10 @@ export function ChartTooltip({
     </View>
   );
 }
+
+/** Gap between a line chart's press dot (4px radius + 2px ring) and the
+ *  tooltip's near edge: the dot's 6px plus 8px of air. */
+const DOT_CLEARANCE = 14;
 
 const styles = StyleSheet.create({
   tooltip: {

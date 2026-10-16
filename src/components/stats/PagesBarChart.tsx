@@ -25,6 +25,7 @@ import { View } from "react-native";
 import { Bar, CartesianChart } from "victory-native";
 
 import {
+  CHART_PRESS_CONFIG,
   ChartTooltip,
   integerTicks,
   PressCursorBand,
@@ -100,6 +101,7 @@ export function PagesBarChart({
         ]}
         frame={{ lineWidth: 0 }}
         chartPressState={state}
+        chartPressConfig={CHART_PRESS_CONFIG}
       >
         {({ points, chartBounds }) => {
           // chartBounds spans the padded axis; the bar centres sit `edge`

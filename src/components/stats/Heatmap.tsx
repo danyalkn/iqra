@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 
 import { EmptyNote, SectionCard } from "@/components/stats/SectionCard";
@@ -28,6 +29,11 @@ export function Heatmap({ grid, totalEntries }: { grid: HeatCell[]; totalEntries
   const [active, setActive] = useState<number | null>(null);
   const [width, setWidth] = useState(0);
   const [tip, setTip] = useState({ w: 0, h: 0 });
+
+  // The tab stays mounted under NativeTabs, so a pinned day would still be
+  // open on the next visit. Unpin it when the tab loses focus (cleanup runs
+  // on blur), so every return starts from a closed grid.
+  useFocusEffect(useCallback(() => () => setActive(null), []));
 
   const onGridLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
   const onTipLayout = (e: LayoutChangeEvent) => {
