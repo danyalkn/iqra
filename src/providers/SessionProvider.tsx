@@ -90,13 +90,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
       if (cancelled) return;
-      setSession(next);
       const nextId = next?.user.id ?? null;
-      // TOKEN_REFRESHED does not change the profile; everything else might
-      // (sign-in, sign-out, user switched, USER_UPDATED).
-      if (event !== "TOKEN_REFRESHED" || nextId !== activeUserId.current) {
-        void syncProfile(nextId);
+      // TOKEN_REFRESHED for the same user does not change the profile.
+      if (event === "TOKEN_REFRESHED" && nextId === activeUserId.current) {
+        setSession(next);
+        return;
       }
+      // Everything else might (sign-in, sign-out, user switched,
+      // USER_UPDATED): load the profile first and publish both together, so
+      // the gate never sees a signed-in user with a null profile and flashes
+      // onboarding at an already-onboarded member for one network roundtrip.
+      // The web awaited getAuth() (user + profile) before rendering anything.
+      // Sign-out resolves at once (no profile to load), so it still flips
+      // the gate immediately.
+      void syncProfile(nextId).then(() => {
+        if (cancelled || activeUserId.current !== nextId) return;
+        setSession(next);
+      });
     });
 
     return () => {
