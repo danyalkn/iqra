@@ -305,6 +305,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+    // The one-line field is 42pt (10 + 22 + 10) and the button 40pt, so a
+    // bottom-aligned button sat 1pt low. Lift it 1pt to share the centre line.
+    marginBottom: 1,
   },
   sendDisabled: { opacity: 0.4 },
   sendPressed: { transform: [{ scale: 0.95 }] },
