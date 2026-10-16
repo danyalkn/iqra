@@ -38,6 +38,7 @@ import {
   type DayReminderStatus,
 } from "@/lib/reminders";
 import type { DayReminder, LogRow } from "@/lib/types";
+import { getPushState as getPushStateFor } from "@/push/register";
 import { supabase } from "@/supabase/client";
 
 export type DayRemindersHandle = { open: () => void };
@@ -45,11 +46,11 @@ export type DayRemindersHandle = { open: () => void };
 /** Push on this device: known on/off, or still being resolved. */
 type PushKnown = "on" | "off" | "loading";
 
-/** Phase 3: replace with the expo-notifications permission + token check
- *  (docs/PUSH.md). Until then every device reports "off", so the sheet shows
- *  the warning and rows say "Time passed" rather than "Sent". */
-async function getPushState(): Promise<"on" | "off"> {
-  return "off";
+/** Push on this device for this member, folded to the two answers this
+ *  section cares about: anything short of "on" (denied, simulator, off) means
+ *  the reminder can only show here on Today. */
+async function getPushState(userId: string): Promise<"on" | "off"> {
+  return (await getPushStateFor(userId)) === "on" ? "on" : "off";
 }
 
 // Push state is stable for a session except the "off" answer, which a
@@ -108,13 +109,13 @@ export function DayReminders({
   }, [reminders]);
 
   const checkPush = useCallback(() => {
-    getPushState()
+    getPushState(userId)
       .then((s) => {
         if (s !== "off") cachedPush = s;
         setPush(s);
       })
       .catch(() => setPush("off"));
-  }, []);
+  }, [userId]);
   // Resolve push state at mount, well before the sheet opens, so the
   // warning is known up front instead of shifting the layout under a thumb.
   useEffect(() => {
