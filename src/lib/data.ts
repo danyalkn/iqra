@@ -33,14 +33,19 @@ async function fetchAll<T>(
   page: (
     from: number,
     to: number,
-  ) => PromiseLike<{ data: unknown[] | null; count: number | null }>,
+  ) => PromiseLike<{ data: unknown[] | null; count: number | null; error?: unknown }>,
   max: number,
 ): Promise<T[]> {
   const out: T[] = [];
   let total = Number.POSITIVE_INFINITY;
   while (out.length < Math.min(total, max)) {
     const from = out.length;
-    const { data, count } = await page(from, Math.min(from + 999, max - 1));
+    const { data, count, error } = await page(from, Math.min(from + 999, max - 1));
+    // supabase-js resolves network and PostgREST failures as { data: null,
+    // error }; swallowing that made a failed load indistinguishable from an
+    // empty history (Journal and Profile showed "Nothing logged yet"). Throw
+    // so callers can show an error and retry. (Fix to mirror to the web repo.)
+    if (error) throw error;
     if (count != null) total = count;
     const rows = (data as T[] | null) ?? [];
     if (rows.length === 0) break;
