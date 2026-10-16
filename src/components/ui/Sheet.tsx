@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import {
   GestureDetector,
   GestureHandlerRootView,
@@ -18,7 +26,9 @@ import { Elevation, Radius, SCRIM } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
 const OPEN_MS = 300;
-const CLOSE_MS = 220;
+/** Exit slide; exported so callers can wait for the Modal to leave (Today
+ *  starts the celebration after it, as the web layered it above the sheet). */
+export const CLOSE_MS = 220;
 /** Drag past this (points) or faster than this (points/s) dismisses. */
 const DISMISS_DISTANCE = 120;
 const DISMISS_VELOCITY = 900;
@@ -31,6 +41,13 @@ const DISMISS_VELOCITY = 900;
  * `dragAnywhere` (default true) lets a drag on the whole panel dismiss it.
  * Pass false when the content is a ScrollView so the two gestures do not
  * fight; the grab handle strip always dismisses.
+ *
+ * Keyboard: the sheet lifts itself above the keyboard. RN's
+ * KeyboardAvoidingView measures its own frame against the keyboard's window
+ * coordinates, so it only works where the frame spans the window: here, at
+ * the Modal root, not inside the bottom-anchored panel. Content must not add
+ * its own KeyboardAvoidingView (it would double-pad); a ScrollView child
+ * shrinks and scrolls because panel and panelInner both flexShrink.
  */
 export function Sheet({
   open,
@@ -150,7 +167,14 @@ export function Sheet({
     >
       {/* Modal is a separate native root on Android, so it needs its own
           gesture root for the pan to be recognized. */}
-      <GestureHandlerRootView style={styles.root}>
+      <GestureHandlerRootView style={styles.fill}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          // The panel's own bottom padding (home indicator) doubles as the
+          // gap above the keyboard instead of leaving an empty band.
+          keyboardVerticalOffset={Platform.OS === "ios" ? -Math.max(28, insets.bottom) : 0}
+          style={styles.root}
+        >
         <Animated.View style={[styles.backdrop, backdropStyle]}>
           <Pressable
             accessibilityRole="button"
@@ -160,6 +184,7 @@ export function Sheet({
           />
         </Animated.View>
         {dragAnywhere ? <GestureDetector gesture={pan}>{panel}</GestureDetector> : panel}
+        </KeyboardAvoidingView>
       </GestureHandlerRootView>
     </Modal>
   );
@@ -172,6 +197,9 @@ const styles = StyleSheet.create({
   panel: {
     borderTopLeftRadius: Radius["2xl"],
     borderTopRightRadius: Radius["2xl"],
+    // With the keyboard up the available height drops below the 92% cap; the
+    // panel -> panelInner -> ScrollView chain shrinks instead of overflowing.
+    flexShrink: 1,
   },
   panelInner: {
     borderTopLeftRadius: Radius["2xl"],
