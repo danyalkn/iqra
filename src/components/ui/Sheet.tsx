@@ -177,6 +177,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: Radius["2xl"],
     borderTopRightRadius: Radius["2xl"],
     overflow: "hidden",
+    // Let a ScrollView child shrink to the 92% cap instead of overflowing
+    // off the top (tall forms: the log sheet, Edit profile with the keyboard).
+    flexShrink: 1,
   },
   handleZone: { alignItems: "center", paddingTop: 12, paddingBottom: 4 },
   handle: { width: 40, height: 6, borderRadius: 3 },
