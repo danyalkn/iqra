@@ -23,6 +23,7 @@ export const Colors = {
     warnTint: "#f6ecd9",
     danger: "#b4453a",
     dangerTint: "#f6e3e0",
+    onDanger: "#ffffff",
     // Ordinal chart ramp: Sabak -> Sabak Para -> Dhor (new -> oldest)
     chart1: "#157f43",
     chart2: "#3d9c65",
@@ -44,11 +45,15 @@ export const Colors = {
     warnTint: "#2a2113",
     danger: "#e06a5c",
     dangerTint: "#2c1815",
+    onDanger: "#ffffff",
     chart1: "#8ed4a6",
     chart2: "#5fae7f",
     chart3: "#3b8a5c",
   },
 } as const;
+
+/** Sheet / dialog backdrop, same in both schemes (web: bg-black/40). */
+export const SCRIM = "rgba(0, 0, 0, 0.4)";
 
 export type Theme = { [K in keyof typeof Colors.light]: string };
 export type ThemeColor = keyof Theme;

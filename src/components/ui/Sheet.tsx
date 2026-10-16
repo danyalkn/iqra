@@ -14,7 +14,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 
-import { Elevation, Radius } from "@/constants/theme";
+import { Elevation, Radius, SCRIM } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
 const OPEN_MS = 300;
@@ -123,19 +123,19 @@ export function Sheet({
     <Animated.View
       accessibilityViewIsModal
       onLayout={(e) => panelH.set(e.nativeEvent.layout.height)}
-      style={[
-        styles.panel,
-        Elevation.e3,
-        {
-          backgroundColor: c.canvas,
-          maxHeight: windowH * 0.92,
-          paddingBottom: Math.max(28, insets.bottom),
-        },
-        panelStyle,
-      ]}
+      style={[styles.panel, Elevation.e3, { maxHeight: windowH * 0.92 }, panelStyle]}
     >
-      {dragAnywhere ? handle : <GestureDetector gesture={pan}>{handle}</GestureDetector>}
-      {children}
+      {/* Rounded clip lives on an inner view: overflow hidden on the shadow
+          view would clip the iOS shadow. */}
+      <View
+        style={[
+          styles.panelInner,
+          { backgroundColor: c.canvas, paddingBottom: Math.max(28, insets.bottom) },
+        ]}
+      >
+        {dragAnywhere ? handle : <GestureDetector gesture={pan}>{handle}</GestureDetector>}
+        {children}
+      </View>
     </Animated.View>
   );
 
@@ -168,8 +168,12 @@ export function Sheet({
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: "flex-end" },
   fill: { flex: 1 },
-  backdrop: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(0,0,0,0.4)" },
+  backdrop: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: SCRIM },
   panel: {
+    borderTopLeftRadius: Radius["2xl"],
+    borderTopRightRadius: Radius["2xl"],
+  },
+  panelInner: {
     borderTopLeftRadius: Radius["2xl"],
     borderTopRightRadius: Radius["2xl"],
     overflow: "hidden",

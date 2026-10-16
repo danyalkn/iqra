@@ -45,7 +45,7 @@ export function Button({
     primary: { bg: c.accent, fg: c.onAccent, shadow: Elevation.e2 },
     secondary: { bg: c.surface2, fg: c.foreground },
     ghost: { bg: "transparent", fg: c.accent },
-    danger: { bg: c.danger, fg: "#ffffff", shadow: Elevation.e2 },
+    danger: { bg: c.danger, fg: c.onDanger, shadow: Elevation.e2 },
   };
   const p = palette[variant];
   const inactive = disabled || loading;
