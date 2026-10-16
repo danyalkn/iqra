@@ -58,7 +58,7 @@ unchanged.
 - [x] Design tokens ported to `src/constants/theme.ts` (colors light/dark, type
       ramp, radii, spacing, elevation).
 - [x] `app.json`: name Iqra, slug iqra, scheme `iqra`, splash colors, bundle
-      id placeholders `com.CHANGEME.iqra` (see Owner tasks).
+      id placeholders `com.qadamtechnologies.iqra` (see Owner tasks).
 - [x] `.env.example` with the public Supabase URL and publishable key.
 - [x] `docs/DECISIONS.md` carries every owner decision from the web build.
 - [x] Placeholder `src/app/index.tsx` that renders a token-styled card and
@@ -70,8 +70,8 @@ Not done from Phase 0: everything below.
 
 Do these early; several are long poles.
 
-1. **Pick the bundle id** (reverse-DNS of the org, e.g. `com.yourorg.iqra`)
-   and replace both `com.CHANGEME.iqra` entries in `app.json`.
+1. ~~Pick the bundle id~~ Done: `com.qadamtechnologies.iqra` (Qadam Technologies
+   Inc., the org on the Apple account). Already set in `app.json`.
 2. **Create the App ID + app record** in App Store Connect under the org.
 3. **File the Family Controls (Distribution) requests on day one.** Four of
    them: the app bundle id plus `.DeviceActivityMonitor`,

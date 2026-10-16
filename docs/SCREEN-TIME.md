@@ -19,11 +19,11 @@ to the "Request the Family Controls (Distribution) capability" page. Notes:
 
 - Submit as the org's **Account Holder**. Admins get rejected or ignored.
 - One request per bundle id. Four total:
-  - `<bundle>` (the app)
-  - `<bundle>.DeviceActivityMonitor`
-  - `<bundle>.ShieldConfiguration`
-  - `<bundle>.ShieldAction`
-- All four must share one App Group (`group.<bundle>`), or provisioning
+  - `com.qadamtechnologies.iqra` (the app)
+  - `com.qadamtechnologies.iqra.DeviceActivityMonitor`
+  - `com.qadamtechnologies.iqra.ShieldConfiguration`
+  - `com.qadamtechnologies.iqra.ShieldAction`
+- All four must share one App Group (`group.com.qadamtechnologies.iqra`), or provisioning
   fails silently for the missing target.
 - After approval: Identifiers -> each App ID -> Additional Capabilities ->
   enable Family Controls (Distribution). Then let EAS regenerate profiles

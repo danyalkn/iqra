@@ -8,7 +8,7 @@
     "scheme": "iqra",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.CHANGEME.iqra",
+      "bundleIdentifier": "com.qadamtechnologies.iqra",
       "supportsTablet": false
     },
     "android": {
@@ -19,7 +19,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.CHANGEME.iqra"
+      "package": "com.qadamtechnologies.iqra"
     },
     "web": {
       "output": "static",
