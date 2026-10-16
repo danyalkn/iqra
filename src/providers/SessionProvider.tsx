@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { isOnboarded as computeOnboarded, type Profile } from "@/lib/auth";
+import { unregisterPush } from "@/push/register";
 import { AUTH_STORAGE_KEY, supabase } from "@/supabase/client";
 import { secureStorage } from "@/supabase/secureStorage";
 
@@ -121,6 +122,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    // This device's push row must go while the session can still delete it
+    // (RLS blocks the delete once signed out). Best-effort with a short
+    // timeout: leaving never waits on the network. The enabled flag stays, so
+    // signing back in re-registers silently (docs/PHASE3.md).
+    const userId = activeUserId.current;
+    if (userId) {
+      await Promise.race([
+        unregisterPush(userId, { keepFlag: true }),
+        new Promise((r) => setTimeout(r, 2500)),
+      ]).catch(() => {});
+    }
     // Local scope: drop this device's session and tokens. The gate flips as
     // soon as onAuthStateChange reports SIGNED_OUT.
     const { error } = await supabase.auth.signOut({ scope: "local" });
