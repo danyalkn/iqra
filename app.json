@@ -42,7 +42,16 @@
         }
       ],
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/brand/notification-96.png",
+          "color": "#157f43",
+          "defaultChannel": "iqra",
+          "enableRemoteNotifications": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
