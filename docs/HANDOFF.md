@@ -351,11 +351,16 @@ once Apple approves the entitlement; do not block Phase 3 on it.
     all-time, so the two can differ for long streaks.
   - Today derives "today", the date label and the Hijri line from a
     minute-aligned `useNow()` so the React Compiler does not freeze them.
-  - Inside NativeTabs on iOS, react-native-screens flips the first ScrollView
-    to automatic content insets (status bar and tab bar), so Today and
-    Profile pad 0 at the top / a fixed 112 or 40 at the bottom on iOS and use
-    the safe-area insets on Android. If the device check shows content under
-    the bar, that assumption was wrong: add `insets.bottom` back.
+  - Insets inside NativeTabs (corrected 2026-10-16 after the iOS 26.5
+    simulator check): react-native-screens does NOT add a top content inset
+    to the tab screens, so every tab pads `insets.top` itself (Today's shape:
+    a root View with `paddingTop: insets.top` and the ScrollView inside it,
+    which also keeps the pull-to-refresh spinner visible). At the bottom the
+    liquid-glass bar is translucent and minimises, so iOS adds
+    `insets.bottom` to the fixed clearance (112 on Today under the FAB, 40
+    elsewhere); Android keeps the fixed value because expo-router wraps the
+    screen in a bottom SafeAreaView. The earlier assumption ("pad 0 at the
+    top on iOS") put Feed, Profile and Insights under the Dynamic Island.
   - Device checklist for the Phase 1 build: (1) log a reading: keyboard rises
     with Pages focused, Save stays visible, confetti after the sheet closes,
     success haptic; (2) hifz: + fans out with the Remind me pill, three
@@ -489,6 +494,33 @@ once Apple approves the entitlement; do not block Phase 3 on it.
     week" once (also when the tab was left on Group), heatmap tooltip
     placement on the edge columns, memory after several visits (six Skia
     canvases live on the tab, issue #630); (4) dark mode on all three.
+- Simulator walkthrough (2026-10-16, iPhone 16 Pro / iOS 26.5, owner's
+  account, driven with idb; see the memory note on simulator testing):
+  Login, Today (log, hifz wheels, Remind me), Journal (edit / delete
+  round-trip), Profile, Settings, Feed (strip, cards, two-tap delete), Chat
+  (members sheet, mute, grouping, receipts, keyboard, swipes, long-press
+  menu, reactions, copy, typeahead, reconnect after background) and Insights
+  (every card, tooltips, scopes, month browser, leaderboard, recap deep link,
+  heatmap) all passed; memory flat over repeated Insights visits; Metro
+  logged no errors. Ten defects were found and fixed the same day (chart
+  swipes not scrolling, chat opening short of the bottom, top insets,
+  bottom clearance, typeahead over the composer, tall sheet under the
+  status bar, clipped "Where you are" switch, dark theme not reaching the
+  keyboard, dark segmented-control contrast, tooltip over the press dot,
+  heatmap tooltip surviving a tab switch, confetti before the keyboard is
+  gone, missing field labels, DateTimePicker deprecation, shadow advisories),
+  then re-verified on the simulator: all ten gone, no regressions. One
+  more fix from that pass: Today re-reads the list after a failed delete
+  instead of restoring a tap-time snapshot (a request that fails after the
+  server committed used to resurrect the row). The Journal still restores
+  the row on error; it is a stack screen that reloads on open, so it was
+  left as is. The simulator cannot judge haptics, and `idb ui text` drops
+  "." and shifted characters, so type credentials one character at a time.
+  Still owner-only on the phone: haptics and the wheel tick, the Today /
+  Yesterday control before 3 AM, live messages and entries from a second
+  device, the nudge countdown (a nudge pushes a real member), onboarding
+  with a new account, Delete account's "not available" line, the trailing
+  line-chart dot.
 - Ultracode: good for Phase 1 and 2 (independent screens). Not for Phase 0,
   3, or 4, which need one consistent thread of decisions.
 - Model guidance from the owner (revised 2026-10-16): the main session runs
@@ -505,7 +537,7 @@ once Apple approves the entitlement; do not block Phase 3 on it.
 |---|---|---|
 | 0 Foundation | done | Built, typechecked, linted and verified on the owner's iPhone via an EAS dev build (2026-10-16). Login was ported early; onboarding is a stub. App Store Connect app record still needed before Phase 3 `eas submit`. |
 | 1 Core screens | code complete | All five screens, the shared log kit and the chart decision landed 2026-10-16 (typecheck, lint, expo-doctor clean; adversarial review pass applied). Needs a dev-client rebuild (expo-haptics, Skia) and the device checklist in the working notes. Stubs by design: NotificationsToggle and DeleteAccount wait for Phase 3. |
-| 2 Social + stats | code complete | Feed, Chat and Insights ported 2026-10-16 (typecheck, lint clean; adversarial review pass applied). Needs a dev-client rebuild (flash-list, keyboard-controller, expo-clipboard) and the Phase 2 device checklist. |
+| 2 Social + stats | code complete, simulator-verified | Feed, Chat and Insights ported 2026-10-16 (typecheck, lint clean; adversarial review applied; iOS 26.5 simulator walkthrough passed after eleven device fixes). EAS dev build with the new native modules is built (2026-10-16); owner phone check still open for haptics, the 3 AM window and live multi-device traffic. |
 | 3 Push + TestFlight | not started | |
 | 4 Screen Time | not started | Entitlement requests: NOT YET FILED (owner task 3) |
 | 5 Retire PWA | not started | |
