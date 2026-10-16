@@ -521,6 +521,16 @@ once Apple approves the entitlement; do not block Phase 3 on it.
   device, the nudge countdown (a nudge pushes a real member), onboarding
   with a new account, Delete account's "not available" line, the trailing
   line-chart dot.
+- Dev builds on the phone (2026-10-16): EAS uses its remote version
+  counter (`appVersionSource: remote` in eas.json), so a `buildNumber` in
+  app.json is ignored. The development profile now has `autoIncrement`, so
+  each dev build shows a distinct "(n)" in the dev launcher and installs
+  over the previous one. Builds 0e480b25 and ff2ff734 (both "0.1.0 (1)")
+  required deleting the Phase 0 app first; a "native module X not found"
+  red box after a rebuild means the old binary is still installed, never
+  that the bundle is wrong. A Metro left running across `npx expo install`
+  serves a stale module graph (red box "requireOptionalNativeModule of
+  null"): restart it with `--clear`.
 - Ultracode: good for Phase 1 and 2 (independent screens). Not for Phase 0,
   3, or 4, which need one consistent thread of decisions.
 - Model guidance from the owner (revised 2026-10-16): the main session runs
