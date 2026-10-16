@@ -92,19 +92,17 @@ Do these early; several are long poles.
    `.ShieldConfiguration`, `.ShieldAction`. Must be submitted by the org's
    **Account Holder**, not an Admin. Form and wording in `docs/SCREEN-TIME.md`.
    Expect days to weeks; open a DTS ticket after two silent weeks.
-4. **EAS account**: the project must live under the Qadam account
-   (`danyal@theqadamapp.com`), NOT the personal `danyal0726` login. Run
-   `npx eas-cli@latest login` with that account, then
-   `npx eas-cli@latest init --force` in this repo (creates the project on
-   expo.dev and writes `extra.eas.projectId` + `owner` into app.json; drop
-   any `extra.router.asyncRoutes` it adds, then commit). A stray
-   `@danyal0726/iqra` project was created by mistake on 2026-10-16 and can
-   be deleted at expo.dev (danyal0726, iqra, Settings). Then
+4. **EAS account**: the Expo account is the personal `danyal0726` login
+   (Expo project `@danyal0726/iqra`, created 2026-10-16). The Apple ID is a
+   different thing: when `eas build` asks for Apple credentials, sign in as
+   `danyal@theqadamapp.com` and pick the Qadam Technologies Inc. team. If
+   this machine is logged out of EAS, run `npx eas-cli@latest login`
+   (danyal0726), then `npx eas-cli@latest init` to relink (drop any
+   `extra.router.asyncRoutes` it adds to app.json, commit). Then
    `npx eas-cli@latest build --profile development --platform ios`: say yes
-   to letting EAS manage credentials, sign in with the org Apple ID when
-   asked, and let it create the distribution certificate, the ad-hoc
-   provisioning profile (register your iPhone's UDID when prompted via the
-   link it prints) and the push key.
+   to letting EAS manage credentials and let it create the distribution
+   certificate, the ad-hoc provisioning profile (register your iPhone's UDID
+   when prompted via the link it prints) and the push key.
 5. **APNs key** (.p8): EAS creates it under the org account when prompted.
 6. **Supabase**: generate an Expo access token (expo.dev -> Access tokens)
    and set it as the `EXPO_ACCESS_TOKEN` secret on the edge function when
