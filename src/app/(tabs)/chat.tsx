@@ -524,15 +524,19 @@ function ChatRoom({
 
   // Auto-scroll on new messages: always for our own sends, otherwise only
   // when already within AT_BOTTOM_PX of the bottom (the web's rule; this is
-  // the only follow, FlashList's own autoscroll is off). The first batch
-  // lands without animation, as the web landed at the bottom on open.
+  // the only follow, FlashList's own autoscroll is off). The first batch is
+  // NOT scrolled from here: this effect runs before FlashList has measured
+  // a single row, so a scrollToEnd now lands against estimated heights and
+  // stops short. MessageList pins itself to the true bottom from FlashList's
+  // onLoad and keeps it there while the first layouts settle (the web
+  // landed at the bottom on open); this only records that we start there.
   const firstScroll = useRef(true);
   useEffect(() => {
     const last = messages[messages.length - 1];
     if (!last) return;
     if (firstScroll.current) {
       firstScroll.current = false;
-      scrollToBottom(false);
+      atBottomRef.current = true;
       return;
     }
     if (last.user_id === userId || atBottomRef.current) scrollToBottom();

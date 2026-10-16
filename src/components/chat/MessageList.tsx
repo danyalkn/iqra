@@ -1,5 +1,5 @@
 import { FlashList, type FlashListRef, type ListRenderItemInfo } from "@shopify/flash-list";
-import { useCallback, useMemo, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import {
   StyleSheet,
   Text,
@@ -26,12 +26,49 @@ export const AT_BOTTOM_PX = 120;
 /** Start at the bottom, as the web landed there on open. FlashList's own
  *  autoscrollToBottomThreshold is left at its default (-1, off): it is a
  *  ratio of the viewport, not pixels, and it would follow every data or
- *  height change on its own. Following is the screen's job (ChatRoom's
- *  gated scrollToBottom and onKeyboardShown read atBottomRef), so a member
- *  reading history is never yanked down. */
+ *  height change on its own. Following new messages is the screen's job
+ *  (ChatRoom's gated scrollToBottom and onKeyboardShown read atBottomRef),
+ *  so a member reading history is never yanked down.
+ *
+ *  startRenderingFromBottom alone does not land at the bottom: FlashList
+ *  treats it as initialScrollIndex = last item and scrolls to that item's
+ *  TOP (from estimated sizes, retried only for 100 ms), and a scrollToEnd
+ *  issued before the first layout runs against estimated content. The list
+ *  therefore pins itself (see pinToEnd / onCommitLayoutEffect below). */
 const MAINTAIN_POSITION = {
   startRenderingFromBottom: true,
 };
+
+/** After the first paint (FlashList's onLoad), every layout commit within
+ *  this window that changes the content or viewport height re-pins the
+ *  list to the bottom: measured row heights replace the estimates over a
+ *  few commits, and on a cold start the safe-area insets (and with them the
+ *  composer's bottom padding) can land after the first layout and shrink
+ *  the viewport. The first drag ends the window early. */
+const SETTLE_MS = 1000;
+
+/** Sub-pixel noise in measured heights is not a change. */
+const EPSILON = 0.5;
+
+type PinState = {
+  /** FlashList's onLoad has fired for the current FlashList instance. */
+  loaded: boolean;
+  /** Date.now() deadline for the settle window (see SETTLE_MS). */
+  settleUntil: number;
+  /** The member's finger is on the list: never scroll under it. */
+  dragging: boolean;
+  /** Content and viewport heights at the last commit, to spot changes. */
+  contentH: number;
+  windowH: number;
+};
+
+const initialPin = (): PinState => ({
+  loaded: false,
+  settleUntil: 0,
+  dragging: false,
+  contentH: -1,
+  windowH: -1,
+});
 
 const keyExtractor = (m: Message) => m.id;
 
@@ -168,6 +205,76 @@ export function MessageList({
     [atBottomRef],
   );
 
+  // ── Pinned to the bottom on open ─────────────────────────────────────────
+  const pin = useRef<PinState>(initialPin());
+  const empty = messages.length === 0;
+  // The empty state unmounts the FlashList; the next one is a new instance
+  // whose own onLoad must run before any commit is trusted.
+  useEffect(() => {
+    if (empty) pin.current = initialPin();
+  }, [empty]);
+
+  /** Jump (no animation) to the true end of the content, and remember the
+   *  heights it was pinned at. FlashList's scrollToEnd first brings the last
+   *  row into the render window, then calls the native scrollToEnd on the
+   *  next tick, which reads the committed native content size. */
+  const pinToEnd = useCallback(() => {
+    const list = listRef.current;
+    if (!list) return;
+    pin.current.contentH = list.getChildContainerDimensions().height;
+    pin.current.windowH = list.getWindowSize().height;
+    atBottomRef.current = true;
+    list.scrollToEnd({ animated: false });
+  }, [listRef, atBottomRef]);
+
+  // First paint: the layout manager exists and the visible rows are
+  // measured, so this is the first moment a scrollToEnd means "the end".
+  const onLoad = useCallback(() => {
+    pin.current.loaded = true;
+    pin.current.settleUntil = Date.now() + SETTLE_MS;
+    pinToEnd();
+  }, [pinToEnd]);
+
+  // Every FlashList layout commit (rows measured, viewport resized). Rules:
+  // - before onLoad: FlashList's own startRenderingFromBottom pass owns the
+  //   offset, and the layout manager may not exist yet;
+  // - never while the member is dragging;
+  // - inside the settle window: re-pin on any content or viewport change;
+  // - afterwards: re-pin only when the viewport SHRINKS (composer grew, a
+  //   reply bar appeared, late insets, the keyboard rising) while the member
+  //   was at the bottom, so the newest row is not pushed under the composer.
+  //   Content growth after the window (a new message, a reaction) is left
+  //   to the screen's gated follow, so reading history is never interrupted.
+  const onCommitLayoutEffect = useCallback(() => {
+    const list = listRef.current;
+    const p = pin.current;
+    if (!list || !p.loaded || p.dragging) return;
+    const contentH = list.getChildContainerDimensions().height;
+    const windowH = list.getWindowSize().height;
+    const contentChanged = Math.abs(contentH - p.contentH) > EPSILON;
+    const windowChanged = Math.abs(windowH - p.windowH) > EPSILON;
+    const windowShrank = p.windowH - windowH > EPSILON;
+    const repin =
+      Date.now() < p.settleUntil
+        ? contentChanged || windowChanged
+        : windowShrank && atBottomRef.current;
+    if (repin) {
+      pinToEnd();
+    } else {
+      p.contentH = contentH;
+      p.windowH = windowH;
+    }
+  }, [listRef, atBottomRef, pinToEnd]);
+
+  const onScrollBeginDrag = useCallback(() => {
+    pin.current.dragging = true;
+    // The member took over: the settle window is over.
+    pin.current.settleUntil = 0;
+  }, []);
+  const onScrollEndDrag = useCallback(() => {
+    pin.current.dragging = false;
+  }, []);
+
   // FlashList is a PureComponent: anything renderItem reads besides `data`
   // goes through extraData so a reaction, receipt or flash re-renders rows.
   const extra = useMemo(() => ({ meta, memberNames }), [meta, memberNames]);
@@ -194,7 +301,7 @@ export function MessageList({
     [revealX, handlePress, onLongPress, onSwipeReply, onOpenReactors, onQuotePress],
   );
 
-  if (messages.length === 0) {
+  if (empty) {
     return (
       <View style={styles.empty}>
         <Text style={[Type.callout, styles.emptyTitle, { color: c.foreground }]}>
@@ -217,7 +324,11 @@ export function MessageList({
       maintainVisibleContentPosition={MAINTAIN_POSITION}
       style={styles.list}
       contentContainerStyle={styles.content}
+      onLoad={onLoad}
+      onCommitLayoutEffect={onCommitLayoutEffect}
       onScroll={onScroll}
+      onScrollBeginDrag={onScrollBeginDrag}
+      onScrollEndDrag={onScrollEndDrag}
       scrollEventThrottle={32}
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
@@ -231,7 +342,10 @@ export function MessageList({
 
 const styles = StyleSheet.create({
   list: { flex: 1 },
-  // Web: px-4 py-4 on the scroller.
+  // Web: px-4 py-4 on the scroller. The bottom padding is only the web's
+  // breathing room under the last bubble: the list is a flex sibling ABOVE
+  // the composer (not under it) inside a KeyboardAvoidingView that pads for
+  // the keyboard, so neither takes space inside this scroll view.
   content: { paddingHorizontal: 16, paddingVertical: 16 },
   // Web: m-auto max-w-xs text-center.
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },

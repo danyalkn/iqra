@@ -190,11 +190,6 @@ export function Composer({
           },
         ]}
       >
-        {/* Mention typeahead: floats above the bar, over the list. */}
-        {mentionQuery && suggestions.length > 0 && (
-          <MentionSuggestions suggestions={suggestions} activeIdx={0} onPick={pickMention} />
-        )}
-
         {/* Replying-to bar */}
         {replyTo && (
           <View
@@ -256,6 +251,13 @@ export function Composer({
             <Send size={18} strokeWidth={2.25} color={c.onAccent} />
           </Pressable>
         </View>
+
+        {/* Mention typeahead: floats above the bar (and the reply bar), over
+            the list. A direct child of this root, which is its positioned
+            ancestor; last so it paints above every sibling, shadow included. */}
+        {mentionQuery && suggestions.length > 0 && (
+          <MentionSuggestions suggestions={suggestions} activeIdx={0} onPick={pickMention} />
+        )}
       </View>
     </GestureDetector>
   );
