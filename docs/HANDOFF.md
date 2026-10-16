@@ -49,7 +49,7 @@ scripts/gen-icons.mjs  Regenerates those icons from inline SVG (needs sharp)
 Path alias `@/*` -> `src/*`, same as the web app, so `src/lib` imports work
 unchanged.
 
-## What is already done (Phase 0 code complete; dev build pending owner)
+## What is already done (Phase 0 complete)
 
 - [x] Expo project scaffolded (default template, trimmed). `npx tsc --noEmit` passes.
 - [x] `src/lib/` copied: dates, entries, feedGroups, format, khatmah, mushaf,
@@ -75,7 +75,10 @@ unchanged.
       be exercised end to end). Onboarding is a stub with Sign out.
 - [x] `eas.json` profiles; `expo-dev-client` installed; `npx expo-doctor` clean.
 
-Not done from Phase 0: the first EAS dev build (needs owner tasks 2 and 4).
+- [x] First EAS development build installed on the owner's iPhone 16 Pro
+      (2026-10-16): login, gate, native tabs, Settings and dark mode verified
+      on device. Credentials (distribution cert, ad-hoc profile, push key)
+      are held by EAS under the Qadam Technologies team.
 
 ## Owner tasks (cannot be done by an agent)
 
@@ -156,8 +159,10 @@ update to the Status section at the bottom of this file.
       signed out is dropped by the gate (login first, then land on Today).
 - [x] `eas.json` profiles: development (dev client, internal), preview
       (internal, Android apk), production (autoIncrement).
-- [ ] First dev build on a real iPhone: `eas build --profile development --platform ios`.
-      Blocked on owner tasks 2 (App ID) and 4 (`eas init`); see Status.
+- [x] First dev build on a real iPhone: `eas build --profile development --platform ios`.
+      Done 2026-10-16. For later dev builds just rerun the command; Metro
+      runs on `npx expo start --port 8082` (8081 is taken by another project
+      on the owner's Mac).
 
 ### Phase 1 - Core screens (parallelizable after Phase 0; ultracode OK)
 
@@ -284,7 +289,7 @@ once Apple approves the entitlement; do not block Phase 3 on it.
 
 | Phase | State | Notes |
 |---|---|---|
-| 0 Foundation | code complete, build pending | Everything in the Phase 0 list is built, typechecked and linted (2026-10-16). Only the first EAS dev build remains, blocked on owner tasks 2 (App ID in App Store Connect) and 4 (`eas init`). Login was ported early; onboarding is a stub. |
+| 0 Foundation | done | Built, typechecked, linted and verified on the owner's iPhone via an EAS dev build (2026-10-16). Login was ported early; onboarding is a stub. App Store Connect app record still needed before Phase 3 `eas submit`. |
 | 1 Core screens | not started | |
 | 2 Social + stats | not started | |
 | 3 Push + TestFlight | not started | |
