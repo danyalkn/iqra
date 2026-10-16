@@ -38,6 +38,7 @@ import {
   updateEntry,
 } from "@/data/entryWrites";
 import { useMembership } from "@/hooks/use-membership";
+import { useNow } from "@/hooks/use-now";
 import { useTheme } from "@/hooks/use-theme";
 import {
   currentStreak,
@@ -129,40 +130,6 @@ function fabBottomOffset(insetBottom: number): number {
 
 /** How long the LogSheet's Modal stays mounted while it slides out. */
 const SHEET_CLOSE_MS = SHEET_CLOSE;
-
-/** Wall clock as state so day-derived values (today, header date, Hijri
- *  date) recompute after local midnight while the tab stays mounted. The
- *  React Compiler memoizes a bare `todayLocal(tz)` on `tz` alone, and
- *  NativeTabs keeps this screen mounted for the whole session, so a resident
- *  Today tab would otherwise think it is yesterday until restart (the web
- *  had no compiler and remounted the page on every navigation). Ticks on the
- *  minute, on foreground return (JS timers sleep in the background) and on
- *  tab focus. */
-function useNow(): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const arm = () => {
-      timer = setTimeout(
-        () => {
-          setNow(Date.now());
-          arm();
-        },
-        60_000 - (Date.now() % 60_000) + 50,
-      );
-    };
-    arm();
-    const sub = AppState.addEventListener("change", (s) => {
-      if (s === "active") setNow(Date.now());
-    });
-    return () => {
-      clearTimeout(timer);
-      sub.remove();
-    };
-  }, []);
-  useFocusEffect(useCallback(() => setNow(Date.now()), []));
-  return now;
-}
 
 /** Native-side reads that keep the error. The shared lib/data helpers (kept
  *  verbatim with the web) collapse a failed request into [], so a dropped
