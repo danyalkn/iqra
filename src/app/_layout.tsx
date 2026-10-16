@@ -9,6 +9,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
@@ -36,12 +37,17 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
-      <ThemeProvider>
-        <SessionProvider>
-          <SplashController />
-          <RootNavigator />
-        </SessionProvider>
-      </ThemeProvider>
+      {/* Keyboard frames for Chat (react-native-keyboard-controller). The
+          provider must sit above every screen; native module, so a dev-client
+          rebuild is needed after it is added. */}
+      <KeyboardProvider>
+        <ThemeProvider>
+          <SessionProvider>
+            <SplashController />
+            <RootNavigator />
+          </SessionProvider>
+        </ThemeProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }
