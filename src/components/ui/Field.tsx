@@ -1,6 +1,6 @@
 import DateTimePicker, {
   DateTimePickerAndroid,
-  type DateTimePickerEvent,
+  type DateTimePickerChangeEvent,
 } from "@react-native-community/datetimepicker";
 import { Clock } from "lucide-react-native";
 import { useState, type ComponentRef, type ReactNode, type Ref } from "react";
@@ -18,6 +18,7 @@ import {
 } from "react-native";
 
 import { Radius, Type } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 
 /** Section label: footnote, uppercase, wide tracking, faint. */
@@ -46,10 +47,14 @@ type InputProps = TextInputProps & {
  *  + a soft ring, which native approximates with a 2px accent border). */
 export function Input({ style, onFocus, onBlur, editable = true, ref, ...rest }: InputProps) {
   const c = useTheme();
+  const scheme = useColorScheme();
   const [focused, setFocused] = useState(false);
   return (
     <TextInput
       ref={ref}
+      // iOS keyboard follows the resolved in-app scheme (also set natively by
+      // ThemeProvider; this covers the first frames and Android no-ops it).
+      keyboardAppearance={scheme}
       placeholderTextColor={c.faint}
       selectionColor={c.accent}
       editable={editable}
@@ -137,9 +142,11 @@ export function TimeInput({
           display="compact"
           disabled={disabled}
           accessibilityLabel={accessibilityLabel}
-          onChange={(_e: DateTimePickerEvent, date?: Date) => {
-            if (date) onChange(dateToHm(date));
-          }}
+          // onValueChange replaces the deprecated onChange; it only fires
+          // when a time is picked, so no event.type check is needed.
+          onValueChange={(_e: DateTimePickerChangeEvent, date: Date) =>
+            onChange(dateToHm(date))
+          }
         />
       </View>
     );
@@ -156,9 +163,9 @@ export function TimeInput({
           value: hmToDate(value),
           mode: "time",
           is24Hour: false,
-          onChange: (e: DateTimePickerEvent, date?: Date) => {
-            if (e.type === "set" && date) onChange(dateToHm(date));
-          },
+          // Fires only on confirm; dismiss goes to onDismiss, which we ignore.
+          onValueChange: (_e: DateTimePickerChangeEvent, date: Date) =>
+            onChange(dateToHm(date)),
         })
       }
     >

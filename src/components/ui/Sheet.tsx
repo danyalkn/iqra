@@ -47,7 +47,9 @@ const DISMISS_VELOCITY = 900;
  * coordinates, so it only works where the frame spans the window: here, at
  * the Modal root, not inside the bottom-anchored panel. Content must not add
  * its own KeyboardAvoidingView (it would double-pad); a ScrollView child
- * shrinks and scrolls because panel and panelInner both flexShrink.
+ * shrinks and scrolls because panel and panelInner both flexShrink. The root
+ * also pads its top by the safe-area inset (+8) so the panel can never rise
+ * into the status bar, in addition to the 92% cap.
  */
 export function Sheet({
   open,
@@ -140,7 +142,14 @@ export function Sheet({
     <Animated.View
       accessibilityViewIsModal
       onLayout={(e) => panelH.set(e.nativeEvent.layout.height)}
-      style={[styles.panel, Elevation.e3, { maxHeight: windowH * 0.92 }, panelStyle]}
+      style={[
+        styles.panel,
+        Elevation.e3,
+        // The shadow view needs an opaque fill too: RN logs a "cannot
+        // calculate shadow efficiently" advisory on every layout otherwise.
+        { backgroundColor: c.canvas, maxHeight: windowH * 0.92 },
+        panelStyle,
+      ]}
     >
       {/* Rounded clip lives on an inner view: overflow hidden on the shadow
           view would clip the iOS shadow. */}
@@ -173,7 +182,11 @@ export function Sheet({
           // The panel's own bottom padding (home indicator) doubles as the
           // gap above the keyboard instead of leaving an empty band.
           keyboardVerticalOffset={Platform.OS === "ios" ? -Math.max(28, insets.bottom) : 0}
-          style={styles.root}
+          // Top padding keeps a tall panel (keyboard up) below the status bar /
+          // Dynamic Island. It only shrinks the room flexShrink works with:
+          // the open and drag animations translate the panel, not this root,
+          // and the backdrop is absolutely positioned so it still covers all.
+          style={[styles.root, { paddingTop: insets.top + 8 }]}
         >
         <Animated.View style={[styles.backdrop, backdropStyle]}>
           <Pressable
