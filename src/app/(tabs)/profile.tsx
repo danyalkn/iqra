@@ -18,9 +18,10 @@ import { WhereYouAre } from "@/components/profile/WhereYouAre";
 import { Avatar, Card } from "@/components/ui";
 import { Type } from "@/constants/theme";
 import { useMembership } from "@/hooks/use-membership";
+import { useNow } from "@/hooks/use-now";
 import { useTheme } from "@/hooks/use-theme";
 import { getMyEntriesAllTime } from "@/lib/data";
-import { currentStreak, localDate, longestStreak, monthKey, todayLocal } from "@/lib/dates";
+import { currentStreak, localDate, longestStreak, monthKey } from "@/lib/dates";
 import { ENTRY_META, TYPES_BY_MODE } from "@/lib/entries";
 import { DEFAULT_MUSHAF, MUSHAF_OPTIONS } from "@/lib/mushaf";
 import { hifzProgress, readingProgress } from "@/lib/progress";
@@ -102,10 +103,11 @@ export default function ProfileScreen() {
   // Entries belong to a circle; if membership goes away so do the numbers.
   const rows = membership ? entries : null;
 
-  // Read the clock once per render and hand the result to the memos, so the
-  // derived numbers depend on a value React can see rather than a hidden
-  // Date.now() inside the memo (same pattern as lastNDaysEndingOn).
-  const today = todayLocal(tz);
+  // A ticking clock (minute-aligned, plus foreground return and focus) so the
+  // day-derived numbers roll over while this tab stays mounted; the React
+  // Compiler would otherwise memoize a bare todayLocal(tz) on tz alone.
+  const now = useNow();
+  const today = localDate(now, tz);
 
   // All-time streaks. Today's Streak tile is bounded by the 120-day
   // getMyRecentEntries window shared with the web, so its "longest" can read
@@ -119,12 +121,12 @@ export default function ProfileScreen() {
     let monthDays = 0;
     for (const day of loggedDays) if (day.startsWith(month)) monthDays++;
     return {
-      streak: currentStreak(loggedDays, tz),
+      streak: currentStreak(loggedDays, tz, now),
       longest: longestStreak(loggedDays),
       monthDays,
       dayOfMonth: +today.slice(8, 10),
     };
-  }, [rows, tz, today]);
+  }, [rows, tz, today, now]);
 
   const progress = useMemo(() => {
     if (!rows) return null;

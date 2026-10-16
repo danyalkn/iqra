@@ -227,13 +227,20 @@ export const BACKDATE_CUTOFF = "03:00";
  * still be logged, so a streak that ran through the day before isn't broken
  * yet either - this matches the midnight "you have until 3 AM" push.
  */
-export function currentStreak(loggedDays: Set<string>, tz: string): number {
-  const today = todayLocal(tz);
+export function currentStreak(
+  loggedDays: Set<string>,
+  tz: string,
+  /** The wall clock to count from. Native passes a ticking value so a
+   *  screen that stays mounted across midnight (or the 3 AM cutoff) does
+   *  not keep yesterday's answer; the web's default is unchanged. */
+  now: number = Date.now(),
+): number {
+  const today = localDate(now, tz);
   let cursor = loggedDays.has(today) ? today : prevYmd(today);
   if (
     !loggedDays.has(cursor) &&
     cursor !== today &&
-    localHm(new Date(), tz) < BACKDATE_CUTOFF
+    localHm(now, tz) < BACKDATE_CUTOFF
   ) {
     cursor = prevYmd(cursor);
   }

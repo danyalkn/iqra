@@ -370,7 +370,7 @@ export default function TodayScreen() {
     () => new Set(entries.map((e) => localDate(e.logged_at, tz))),
     [entries, tz],
   );
-  const streak = currentStreak(loggedDays, tz);
+  const streak = currentStreak(loggedDays, tz, now);
   const longest = longestStreak(loggedDays);
 
   const todayEntries = useMemo(
