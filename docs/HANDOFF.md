@@ -92,9 +92,14 @@ Do these early; several are long poles.
    `.ShieldConfiguration`, `.ShieldAction`. Must be submitted by the org's
    **Account Holder**, not an Admin. Form and wording in `docs/SCREEN-TIME.md`.
    Expect days to weeks; open a DTS ticket after two silent weeks.
-4. **EAS account**: already logged in as `danyal0726` on this machine. Run
-   `npx eas-cli@latest init` in this repo (creates the project on expo.dev
-   and writes `extra.eas.projectId` into app.json; commit that). Then
+4. **EAS account**: the project must live under the Qadam account
+   (`danyal@theqadamapp.com`), NOT the personal `danyal0726` login. Run
+   `npx eas-cli@latest login` with that account, then
+   `npx eas-cli@latest init --force` in this repo (creates the project on
+   expo.dev and writes `extra.eas.projectId` + `owner` into app.json; drop
+   any `extra.router.asyncRoutes` it adds, then commit). A stray
+   `@danyal0726/iqra` project was created by mistake on 2026-10-16 and can
+   be deleted at expo.dev (danyal0726, iqra, Settings). Then
    `npx eas-cli@latest build --profile development --platform ios`: say yes
    to letting EAS manage credentials, sign in with the org Apple ID when
    asked, and let it create the distribution certificate, the ad-hoc
