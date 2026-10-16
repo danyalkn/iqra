@@ -25,7 +25,7 @@ repo owns Supabase.
 | Data | supabase-js directly from the client (replaces Next server components) | The queries in `reference/web-pwa/data.ts` are already plain supabase-js |
 | Realtime | supabase-js `postgres_changes` (same as web) | Port the chat reconnect logic as-is |
 | Push | Expo push tokens via `expo-notifications`; edge function gains an Expo path | One API for APNs + FCM; web push path stays for PWA users |
-| Charts | `victory-native` (Skia) or `react-native-gifted-charts` | recharts is DOM-only. Pick one in Phase 2, prefer victory-native |
+| Charts | `victory-native` 42 on `@shopify/react-native-skia` 2.14 (decided 2026-10-16) | recharts is DOM-only. Skia canvas with a real numeric time axis (tickValues + formatXLabel), per-axis tick values for the Juz Y scale, Reanimated press tooltips that work on the New Architecture, colours as plain props for live theme flips. gifted-charts is index-spaced with equal Y sections only and its pointer tooltip is broken on iOS New Arch (issue #1219) |
 | Styling | `StyleSheet` + tokens in `src/constants/theme.ts` | Keep it boring. NativeWind is acceptable if the porting agent prefers Tailwind-shaped code, but decide once |
 | Screen Time (iOS) | `react-native-device-activity` (Kingstinct) | Expo config plugin, wraps FamilyControls + ManagedSettings + DeviceActivity |
 | App blocking (Android) | `expo-app-blocker` or a small custom module | UsageStatsManager + overlay; sideloaded so no Play policy review |
@@ -174,28 +174,38 @@ components have comments explaining every non-obvious rule.
 
 - [x] Login (`app/login/LoginForm.tsx`): ported in Phase 0 as
       `src/app/(auth)/login.tsx`. The gate navigates; the screen never does.
-- [ ] Onboarding (`app/onboarding/OnboardingFlow.tsx`): name, mode, timezone
-      (from device), mushaf. Stub exists at `src/app/onboarding.tsx`; call
-      `refreshProfile()` from `useSession()` after the upsert so the gate
-      flips to the tabs. Drop the web's step 3 (Add to Home Screen).
-- [ ] Today (`app/(app)/today/TodayClient.tsx` + `components/LogSheet.tsx` +
-      `SpeedDial.tsx` + `WheelPicker.tsx` + `DayReminders.tsx` +
-      `Celebration.tsx` + `EntryRow.tsx`). This is the heart of the app:
-      hifz fan-out vs reading FAB, 3 AM backdating window, "Remind me" pill,
-      day-reminder presets, confetti. Haptics on save.
-- [ ] Journal (`JournalClient.tsx`, `entryWrites.ts`): all-time entries,
-      edit/delete sheets shared with Today. It is a stack screen
-      (`src/app/journal.tsx`) opened from the Today header, not a tab.
-- [ ] Profile tab (`src/app/(tabs)/profile.tsx`): new, no web equivalent.
-      Owner to decide the content; default proposal: avatar, name, mode,
-      mushaf and streak summary, with rows into Journal and Settings.
-- [ ] Settings (`app/(app)/settings/page.tsx` + ProfileSection,
-      frame + ThemeToggle (SegmentedControl on `useThemeContext`) + SignOut
-      already in `src/app/settings.tsx`; add the rest:
-      RemindersManager, NotificationsToggle, CelebrateToggle, ThemeToggle,
-      MushafSelect, SignOutButton, DeleteAccount). NotificationsToggle
-      becomes the Expo push permission flow (Phase 3). DeleteAccount calls
-      a new edge function (Phase 3) instead of the Next API route.
+- [x] Onboarding (`app/onboarding/OnboardingFlow.tsx`): two steps (mode;
+      name + timezone picker + mushaf + first daily reminder), web step 3
+      dropped. `src/app/onboarding.tsx`, `src/components/onboarding/`,
+      `src/components/TimezonePicker.tsx` (searchable IANA sheet, device zone
+      pinned, `Intl.supportedValuesOf` with a static fallback). Awaits
+      `refreshProfile()`; the gate flips.
+- [x] Today (`src/app/(tabs)/today.tsx` + `src/components/LogSheet.tsx`,
+      `SpeedDial.tsx`, `WheelPicker.tsx`, `DayReminders.tsx`,
+      `Celebration.tsx`, `EntryRow.tsx`, `EmptyState.tsx`, `entryIcons.ts`;
+      edit/delete writes in `src/data/entryWrites.ts`). Hifz fan-out vs
+      reading FAB, 3 AM window with an AppState recheck, Remind me pill,
+      presets, confetti (reduce-motion aware), haptics on save and on failed
+      writes. Push state is a Phase 3 stub ("off").
+- [x] Journal (`src/app/journal.tsx`): all-time entries, by day / by juz,
+      filters, Show more, edit/delete via the shared LogSheet. The web's
+      sessionStorage "entries changed" flag is an in-memory flag in
+      `entryWrites.ts` that Today consumes on focus.
+- [x] Profile tab (`src/app/(tabs)/profile.tsx` + `src/components/profile/`):
+      avatar, name, mode and mushaf pills, Streak / This month tiles, "Where
+      you are" (bookmark or sabak total), rows into Journal and Settings.
+      Personal only (DECISIONS "no showing off"). Pull to refresh.
+- [x] Settings (`src/app/settings.tsx` + `src/components/settings/`):
+      ProfileSection (edit sheet with the timezone picker), MushafSelect,
+      Appearance, NotificationsToggle (disabled Phase 3 stub), CelebrateToggle
+      (`PREF_KEYS.celebrate`), RemindersManager, Sign out, DeleteAccount
+      (`src/data/account.ts` invokes the `delete-account` edge function that
+      Phase 3 deploys; until then it reports "not available in this build").
+- [x] Chart library decided: victory-native on Skia (see Stack and the
+      working note). Installed; Stats itself is Phase 2.
+- [ ] Device verification of all of the above on the owner's iPhone after a
+      dev-client rebuild (expo-haptics and Skia are native modules). Checklist
+      in the working notes below.
 
 ### Phase 2 - Social and stats (parallelizable; ultracode OK)
 
@@ -286,6 +296,59 @@ once Apple approves the entitlement; do not block Phase 3 on it.
 - Typed routes live in `.expo/types/router.d.ts` (gitignored). They are
   regenerated by `npx expo start`; run it once after adding a route or
   `tsc` will not know the new href.
+- Charts (decided 2026-10-16, Phase 1): `victory-native` 42.0.1 on
+  `@shopify/react-native-skia` 2.14.0, the SDK 58 bundled version, no config
+  plugin; installed, needs the dev-client rebuild that expo-haptics already
+  forced. Port `chartKit` as a native `useChartColors` reading theme tokens
+  plus a `useChartFont` built on Skia's `matchFont` (system font, no .ttf to
+  bundle): labels render only when a font is passed. Two corrections to the
+  web-era assumptions: HifzBreakdownCard is three small-multiple bar charts,
+  not a stacked bar, and no chart shows two Y axes at once (ReadingView swaps
+  between a Juz-tick axis and a 0-auto axis). Categorical axes use the index
+  as `xKey` with `formatXLabel` returning "" to skip labels. Watch open
+  issue #630 (memory leak with animated charts): keep animation off as the
+  web does and check memory after a few Stats visits in the dev client.
+- Phase 1 notes (2026-10-16):
+  - `Sheet` owns keyboard avoidance (a root KeyboardAvoidingView in the
+    Modal; a nested one inside the bottom-anchored panel cannot measure the
+    overlap). Sheet content must not add its own. `panel` and `panelInner`
+    flexShrink so a ScrollView child shrinks and scrolls. `CLOSE_MS` is
+    exported; Today waits for it before the celebration.
+  - `SessionProvider` publishes session and profile together on auth events
+    (profile loads first), so the gate never flashes onboarding at a member
+    who is already onboarded.
+  - Shared lib fix to mirror to the web repo: `fetchAll` in `src/lib/data.ts`
+    now throws on a page error instead of returning the rows so far. Before,
+    a failed load read as an empty history ("Nothing logged yet").
+  - Web bug to mirror: web `ProfileSection` saves any typed string into
+    `profiles.timezone`; a bad zone aborts the shared reminder cron for
+    everyone (`now() at time zone p.timezone`). Native validates with
+    `isValidTimezone` from `TimezonePicker.tsx` before saving.
+  - Today's "longest" streak is bounded by the 120-day
+    `getMyRecentEntries` window on both apps; Profile's "best ever" is
+    all-time, so the two can differ for long streaks.
+  - Today derives "today", the date label and the Hijri line from a
+    minute-aligned `useNow()` so the React Compiler does not freeze them.
+  - Inside NativeTabs on iOS, react-native-screens flips the first ScrollView
+    to automatic content insets (status bar and tab bar), so Today and
+    Profile pad 0 at the top / a fixed 112 or 40 at the bottom on iOS and use
+    the safe-area insets on Android. If the device check shows content under
+    the bar, that assumption was wrong: add `insets.bottom` back.
+  - Device checklist for the Phase 1 build: (1) log a reading: keyboard rises
+    with Pages focused, Save stays visible, confetti after the sheet closes,
+    success haptic; (2) hifz: + fans out with the Remind me pill, three
+    wheels snap with a tick per row, Starts at / Portion columns swap;
+    (3) before 3 AM the Today / Yesterday control appears and "Saved to
+    yesterday." shows; (4) Remind me sheet: presets, compact time picker,
+    the "not set up yet" note links to Settings; (5) Journal: back pops,
+    filters bleed to the edges, edit and delete round-trip to Today;
+    (6) Settings: Edit profile and Delete account sheets lift above the
+    keyboard, mushaf change restamps the next entry, Delete shows the
+    "not available in this build yet" line; (7) Profile: numbers update after
+    logging on Today; (8) new account: onboarding two steps, timezone picker,
+    lands on Today with no flash; (9) FAB and last rows clear the liquid-glass
+    tab bar in both its full and minimized states; (10) dark mode on every
+    screen.
 - Ultracode: good for Phase 1 and 2 (independent screens). Not for Phase 0,
   3, or 4, which need one consistent thread of decisions.
 - Model guidance from the owner: run Fable 5.1 by default, high or xhigh
@@ -297,7 +360,7 @@ once Apple approves the entitlement; do not block Phase 3 on it.
 | Phase | State | Notes |
 |---|---|---|
 | 0 Foundation | done | Built, typechecked, linted and verified on the owner's iPhone via an EAS dev build (2026-10-16). Login was ported early; onboarding is a stub. App Store Connect app record still needed before Phase 3 `eas submit`. |
-| 1 Core screens | not started | |
+| 1 Core screens | code complete | All five screens, the shared log kit and the chart decision landed 2026-10-16 (typecheck, lint, expo-doctor clean; adversarial review pass applied). Needs a dev-client rebuild (expo-haptics, Skia) and the device checklist in the working notes. Stubs by design: NotificationsToggle and DeleteAccount wait for Phase 3. |
 | 2 Social + stats | not started | |
 | 3 Push + TestFlight | not started | |
 | 4 Screen Time | not started | Entitlement requests: NOT YET FILED (owner task 3) |
