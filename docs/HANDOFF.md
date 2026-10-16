@@ -246,29 +246,28 @@ Chat tab can load.
 
 ### Phase 3 - Push, deep links, first TestFlight (single-threaded)
 
-Design is in `docs/PUSH.md`. Summary:
+**The full plan is `docs/PHASE3.md`** (written 2026-10-16 from a check of
+the code, the migrations and the SDK 58 / EAS docs; it corrects
+`docs/PUSH.md` where the two differ and ends with the kickoff brief to
+paste into the next session). Summary:
 
-- [ ] `expo-notifications`: request permission from Settings toggle, get the
-      Expo push token, upsert into `push_subscriptions` with a native shape.
-- [ ] Migration: `push_subscriptions.kind` ('web' | 'expo') or store the
-      Expo token in the existing `subscription` jsonb as
-      `{"expo": "ExponentPushToken[...]"}` so no schema change is needed.
-      Prefer the jsonb approach (no migration to paste). Decide, document.
-- [ ] Edge function `send-push`: branch per row. Web rows -> web-push as
-      today. Expo rows -> batch POST to `https://exp.host/--/api/v2/push/send`
-      with `EXPO_ACCESS_TOKEN`; prune on `DeviceNotRegistered`. Keep the
-      `url` payload key; map it to `data.url` for Expo and handle it in the
-      notification-response listener to navigate.
-- [ ] Edge function `delete-account` (service role) replacing
-      `reference/web-pwa/app/api/account/route.ts`.
-- [ ] Foreground notification behavior: show banner for chat only when not
-      on the chat screen.
-- [ ] `eas build --profile production --platform ios` -> `eas submit` ->
-      TestFlight external group with a public link. First build needs Beta
-      App Review (one to two days).
-- [ ] `eas build --profile preview --platform android` -> APK -> send the
-      EAS internal-distribution link to the Android member.
-- [ ] `eas update` configured (channel per profile) so JS fixes ship OTA.
+- [ ] `expo-notifications` + config plugin, dev-client rebuild, `src/push/`
+      (register / unregister / state, chat visibility), the Settings toggle
+      and `DayReminders` off their stubs, sign-out deletes the device row.
+- [ ] `PushController` in the root layout: foreground handler (suppress
+      `chat-*` while the chat is on screen), tap routing through the auth
+      gate via `toNativeHref`, cold-start and signed-out cases.
+- [ ] Interactive notifications (owner request): `log-reading` /
+      `log-hifz` categories with action buttons and a text input so a
+      reminder can log an entry without opening the app where the platform
+      allows it; otherwise it opens straight into a prefilled log sheet.
+- [ ] `send-push`: Expo branch (exp.host batch, `DeviceNotRegistered`
+      pruning, `categoryId`), pinned imports. One migration: revoke public
+      execute on `send_push`, reminder jobs add `category`.
+- [ ] Edge function `delete-account` (service role, verify the JWT).
+- [ ] Version bump, production build, `eas submit`, TestFlight external
+      group with a public link, Android APK via `preview`, `eas update`
+      smoke test.
 
 ### Phase 4 - Screen Time (single-threaded, needs a real iPhone)
 
@@ -548,6 +547,6 @@ once Apple approves the entitlement; do not block Phase 3 on it.
 | 0 Foundation | done | Built, typechecked, linted and verified on the owner's iPhone via an EAS dev build (2026-10-16). Login was ported early; onboarding is a stub. App Store Connect app record still needed before Phase 3 `eas submit`. |
 | 1 Core screens | code complete | All five screens, the shared log kit and the chart decision landed 2026-10-16 (typecheck, lint, expo-doctor clean; adversarial review pass applied). Needs a dev-client rebuild (expo-haptics, Skia) and the device checklist in the working notes. Stubs by design: NotificationsToggle and DeleteAccount wait for Phase 3. |
 | 2 Social + stats | code complete, simulator-verified | Feed, Chat and Insights ported 2026-10-16 (typecheck, lint clean; adversarial review applied; iOS 26.5 simulator walkthrough passed after eleven device fixes). EAS dev build with the new native modules is built (2026-10-16); owner phone check still open for haptics, the 3 AM window and live multi-device traffic. |
-| 3 Push + TestFlight | not started | |
+| 3 Push + TestFlight | not started | Handoff written: `docs/PHASE3.md` (plan, owner tasks, decisions, kickoff brief). Owner tasks 1 to 3 there are the long poles (App Store Connect record, privacy policy URL + test account, pasting the migration and deploying the two functions). |
 | 4 Screen Time | not started | Entitlement requests: NOT YET FILED (owner task 3) |
 | 5 Retire PWA | not started | |
