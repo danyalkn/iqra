@@ -1,0 +1,179 @@
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import {
+  GestureDetector,
+  GestureHandlerRootView,
+  usePanGesture,
+} from "react-native-gesture-handler";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { scheduleOnRN } from "react-native-worklets";
+
+import { Elevation, Radius } from "@/constants/theme";
+import { useTheme } from "@/hooks/use-theme";
+
+const OPEN_MS = 300;
+const CLOSE_MS = 220;
+/** Drag past this (points) or faster than this (points/s) dismisses. */
+const DISMISS_DISTANCE = 120;
+const DISMISS_VELOCITY = 900;
+
+/**
+ * Bottom sheet, ported from reference/web-pwa/components/ui/Sheet.tsx:
+ * backdrop, slide-up, tap-outside or swipe-down to dismiss, hardware back
+ * closes it. Content is capped at 92% of the window like the web.
+ *
+ * `dragAnywhere` (default true) lets a drag on the whole panel dismiss it.
+ * Pass false when the content is a ScrollView so the two gestures do not
+ * fight; the grab handle strip always dismisses.
+ */
+export function Sheet({
+  open,
+  onClose,
+  children,
+  dragAnywhere = true,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  dragAnywhere?: boolean;
+}) {
+  const c = useTheme();
+  const insets = useSafeAreaInsets();
+  const { height: windowH } = useWindowDimensions();
+  // `render` = open or mid-exit. The previous-open value is adjusted during
+  // render (the React-sanctioned way to react to a prop flip) so the exit
+  // animation can run after `open` turns false without a setState in an
+  // effect body.
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [closing, setClosing] = useState(false);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (!open) setClosing(true);
+  }
+  const render = open || closing;
+  const translateY = useSharedValue(windowH);
+  const backdrop = useSharedValue(0);
+  const panelH = useSharedValue(windowH);
+
+  // The web waited a frame before sliding in so the transition ran; here the
+  // Modal mounts, then the values animate from off-screen.
+  useEffect(() => {
+    if (open) {
+      translateY.set(windowH);
+      backdrop.set(0);
+      translateY.set(withTiming(0, { duration: OPEN_MS, easing: Easing.out(Easing.cubic) }));
+      backdrop.set(withTiming(1, { duration: OPEN_MS }));
+      return;
+    }
+    if (!closing) return;
+    backdrop.set(withTiming(0, { duration: CLOSE_MS }));
+    translateY.set(
+      withTiming(panelH.get(), { duration: CLOSE_MS, easing: Easing.in(Easing.cubic) }),
+    );
+    const t = setTimeout(() => setClosing(false), CLOSE_MS);
+    return () => clearTimeout(t);
+    // translateY/backdrop/panelH are stable shared-value refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, closing, windowH]);
+
+  const requestClose = useCallback(() => onClose(), [onClose]);
+
+  const pan = usePanGesture({
+    // Downward drags only; an upward move lets any inner scroll take over.
+    activeOffsetY: 8,
+    failOffsetY: -12,
+    onUpdate: (e) => {
+      "worklet";
+      translateY.set(Math.max(0, e.translationY));
+      backdrop.set(1 - Math.min(1, Math.max(0, e.translationY) / panelH.get()) * 0.6);
+    },
+    onDeactivate: (e) => {
+      "worklet";
+      const shouldClose =
+        e.translationY > DISMISS_DISTANCE || e.velocityY > DISMISS_VELOCITY;
+      if (shouldClose) {
+        scheduleOnRN(requestClose);
+      } else {
+        translateY.set(withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) }));
+        backdrop.set(withTiming(1, { duration: 200 }));
+      }
+    },
+  });
+
+  const panelStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.get() }],
+  }));
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: backdrop.get() }));
+
+  if (!render) return null;
+
+  const handle = (
+    <View style={styles.handleZone}>
+      <View style={[styles.handle, { backgroundColor: c.border }]} />
+    </View>
+  );
+
+  const panel = (
+    <Animated.View
+      accessibilityViewIsModal
+      onLayout={(e) => panelH.set(e.nativeEvent.layout.height)}
+      style={[
+        styles.panel,
+        Elevation.e3,
+        {
+          backgroundColor: c.canvas,
+          maxHeight: windowH * 0.92,
+          paddingBottom: Math.max(28, insets.bottom),
+        },
+        panelStyle,
+      ]}
+    >
+      {dragAnywhere ? handle : <GestureDetector gesture={pan}>{handle}</GestureDetector>}
+      {children}
+    </Animated.View>
+  );
+
+  return (
+    <Modal
+      visible
+      transparent
+      statusBarTranslucent
+      navigationBarTranslucent
+      animationType="none"
+      onRequestClose={requestClose}
+    >
+      {/* Modal is a separate native root on Android, so it needs its own
+          gesture root for the pan to be recognized. */}
+      <GestureHandlerRootView style={styles.root}>
+        <Animated.View style={[styles.backdrop, backdropStyle]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            style={styles.fill}
+            onPress={requestClose}
+          />
+        </Animated.View>
+        {dragAnywhere ? <GestureDetector gesture={pan}>{panel}</GestureDetector> : panel}
+      </GestureHandlerRootView>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, justifyContent: "flex-end" },
+  fill: { flex: 1 },
+  backdrop: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(0,0,0,0.4)" },
+  panel: {
+    borderTopLeftRadius: Radius["2xl"],
+    borderTopRightRadius: Radius["2xl"],
+    overflow: "hidden",
+  },
+  handleZone: { alignItems: "center", paddingTop: 12, paddingBottom: 4 },
+  handle: { width: 40, height: 6, borderRadius: 3 },
+});
