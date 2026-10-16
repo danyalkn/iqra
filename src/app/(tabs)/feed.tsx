@@ -31,9 +31,20 @@ import type { GroupMember, LogRow } from "@/lib/types";
 import { useSession } from "@/providers/SessionProvider";
 import { supabase } from "@/supabase/client";
 
-/** Web: pb-6 under the list. Fixed 40 here: see the insets note on the
- *  screen (the tab bar is already cleared by the platform). */
+/** Web: pb-6 under the list. Fixed 40 here, plus the tab bar on iOS: see
+ *  listBottomClearance and the insets note on the screen. */
 const LIST_BOTTOM_CLEARANCE = 40;
+
+/** Space under the last card. On iOS the liquid-glass tab bar floats over the
+ *  tab screen and nothing insets the scroll view for it (the Phase 1 device
+ *  check showed content under the bar), and insets.bottom there is the tab
+ *  bar plus the home indicator (the tab screen has its own SafeAreaProvider),
+ *  so it is added on top of the fixed gap. On Android expo-router wraps the
+ *  tab screen in a SafeAreaView whose bottom edge already clears the bar, so
+ *  adding it again would leave a blank band. */
+function listBottomClearance(insetBottom: number): number {
+  return Platform.OS === "ios" ? LIST_BOTTOM_CLEARANCE + insetBottom : LIST_BOTTOM_CLEARANCE;
+}
 
 const REFRESH_ERROR = "Couldn’t refresh the feed. Pull down to try again.";
 
@@ -132,11 +143,13 @@ const byNewest = (a: LogRow, b: LogRow) =>
  * here once membership resolves, so every "initial" value the web took for
  * granted is async state below.
  *
- * Insets: on iOS react-native-screens flips the tab screen's first scroll
- * view to automatic content-inset adjustment (status bar at the top, the
- * tab bar and home indicator at the bottom), so the content pads 0 at the
- * top there; on Android native tabs apply only the bottom inset, so the top
- * is ours to pad. Same reasoning as Profile.
+ * Insets: the tab screen gets no automatic top inset on either platform (on
+ * iOS 26 react-native-screens does not inset the scroll view for the status
+ * bar and Dynamic Island, and Android native tabs apply only the bottom
+ * inset), so the root View pads insets.top itself and the ScrollView sits
+ * inside it. That keeps the pull-to-refresh spinner below the status bar,
+ * which it would not be if the padding lived in the scroll content. The
+ * bottom is listBottomClearance. Same shape as Today and Profile.
  */
 export default function FeedScreen() {
   const c = useTheme();
@@ -461,7 +474,7 @@ export default function FeedScreen() {
     ymd === today ? "Today" : ymd === yesterday ? "Yesterday" : dayLabel(ymd);
 
   if (membership === null && circleCheck === "none") {
-    // Root is a plain View here, so it pads the status bar itself.
+    // Same root as the main return below: a View that pads the status bar.
     return (
       <View style={[styles.root, { paddingTop: insets.top, backgroundColor: c.canvas }]}>
         <Placeholder
@@ -482,109 +495,112 @@ export default function FeedScreen() {
   const loadFailed = loadState === "failed" || circleFailed;
 
   return (
-    <ScrollView
-      style={[styles.root, { backgroundColor: c.canvas }]}
-      contentContainerStyle={[
-        styles.content,
-        { paddingTop: Platform.OS === "ios" ? 0 : insets.top },
-      ]}
-      refreshControl={
-        groupId || membership === null ? (
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.muted} />
-        ) : undefined
-      }
-    >
-      {/* Header. The member count waits for the members list rather than
-          flashing "0 members" (the web had the list at first paint). */}
-      <View style={styles.header}>
-        {membership && members.length > 0 ? (
-          <Text style={[Type.footnote, styles.upper, { color: c.faint }]}>
-            {groupName} · {members.length} {members.length === 1 ? "member" : "members"}
-          </Text>
-        ) : null}
-        <Text style={[Type.display, styles.title, { color: c.foreground }]}>Feed</Text>
-      </View>
-
-      {showBody && loadFailed && (
-        <View style={styles.failed}>
-          <EmptyState
-            icon={WifiOff}
-            title="Couldn’t load the feed"
-            note="Check your connection and try again."
-          />
-          <Button variant="secondary" size="md" onPress={() => void reload()} style={styles.retry}>
-            Try again
-          </Button>
+    <View style={[styles.root, { paddingTop: insets.top, backgroundColor: c.canvas }]}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: listBottomClearance(insets.bottom) },
+        ]}
+        refreshControl={
+          groupId || membership === null ? (
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.muted} />
+          ) : undefined
+        }
+      >
+        {/* Header. The member count waits for the members list rather than
+            flashing "0 members" (the web had the list at first paint). */}
+        <View style={styles.header}>
+          {membership && members.length > 0 ? (
+            <Text style={[Type.footnote, styles.upper, { color: c.faint }]}>
+              {groupName} · {members.length} {members.length === 1 ? "member" : "members"}
+            </Text>
+          ) : null}
+          <Text style={[Type.display, styles.title, { color: c.foreground }]}>Feed</Text>
         </View>
-      )}
 
-      {showBody && !loadFailed && userId && (
-        <View style={styles.sections}>
-          {/* Logged-today strip */}
-          <LoggedTodayStrip
-            members={members}
-            loggedTodayIds={loggedTodayIds}
-            userId={userId}
-            cooldownLeft={cooldownLeft}
-            onNudge={nudge}
-          />
-
-          {refreshError && (
-            <View style={[styles.banner, { backgroundColor: c.dangerTint }]}>
-              <Text style={[Type.footnote, { color: c.danger }]}>{refreshError}</Text>
-            </View>
-          )}
-          {deleteError && (
-            <View style={[styles.banner, { backgroundColor: c.dangerTint }]}>
-              <Text style={[Type.footnote, { color: c.danger }]}>{deleteError}</Text>
-            </View>
-          )}
-
-          {/* Feed. The web tested entries.length; days.length also covers
-              entries that all fall outside the whole-day floor, which would
-              otherwise draw nothing at all. */}
-          {days.length === 0 ? (
+        {showBody && loadFailed && (
+          <View style={styles.failed}>
             <EmptyState
-              icon={Inbox}
-              title="No activity yet"
-              note="When your circle logs, it shows up here. Be the first today."
+              icon={WifiOff}
+              title="Couldn’t load the feed"
+              note="Check your connection and try again."
             />
-          ) : (
-            days.map(({ ymd, cards }) => (
-              <View key={ymd}>
-                <Text style={[Type.footnote, styles.upper, styles.dayHeading, { color: c.faint }]}>
-                  {dayHeading(ymd)}
-                </Text>
-                <View style={styles.cards}>
-                  {cards.map((card) => {
-                    const key = `${ymd}:${card.user_id}`;
-                    return (
-                      <FeedCardView
-                        key={key}
-                        card={card}
-                        member={memberMap.get(card.user_id)}
-                        isMe={card.user_id === userId}
-                        tz={tz}
-                        expanded={open.has(key)}
-                        onToggle={() => toggleCard(key)}
-                        confirming={confirming}
-                        onDelete={onDelete}
-                      />
-                    );
-                  })}
-                </View>
+            <Button variant="secondary" size="md" onPress={() => void reload()} style={styles.retry}>
+              Try again
+            </Button>
+          </View>
+        )}
+
+        {showBody && !loadFailed && userId && (
+          <View style={styles.sections}>
+            {/* Logged-today strip */}
+            <LoggedTodayStrip
+              members={members}
+              loggedTodayIds={loggedTodayIds}
+              userId={userId}
+              cooldownLeft={cooldownLeft}
+              onNudge={nudge}
+            />
+
+            {refreshError && (
+              <View style={[styles.banner, { backgroundColor: c.dangerTint }]}>
+                <Text style={[Type.footnote, { color: c.danger }]}>{refreshError}</Text>
               </View>
-            ))
-          )}
-        </View>
-      )}
-    </ScrollView>
+            )}
+            {deleteError && (
+              <View style={[styles.banner, { backgroundColor: c.dangerTint }]}>
+                <Text style={[Type.footnote, { color: c.danger }]}>{deleteError}</Text>
+              </View>
+            )}
+
+            {/* Feed. The web tested entries.length; days.length also covers
+                entries that all fall outside the whole-day floor, which would
+                otherwise draw nothing at all. */}
+            {days.length === 0 ? (
+              <EmptyState
+                icon={Inbox}
+                title="No activity yet"
+                note="When your circle logs, it shows up here. Be the first today."
+              />
+            ) : (
+              days.map(({ ymd, cards }) => (
+                <View key={ymd}>
+                  <Text style={[Type.footnote, styles.upper, styles.dayHeading, { color: c.faint }]}>
+                    {dayHeading(ymd)}
+                  </Text>
+                  <View style={styles.cards}>
+                    {cards.map((card) => {
+                      const key = `${ymd}:${card.user_id}`;
+                      return (
+                        <FeedCardView
+                          key={key}
+                          card={card}
+                          member={memberMap.get(card.user_id)}
+                          isMe={card.user_id === userId}
+                          tz={tz}
+                          expanded={open.has(key)}
+                          onToggle={() => toggleCard(key)}
+                          confirming={confirming}
+                          onDelete={onDelete}
+                        />
+                      );
+                    })}
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingBottom: LIST_BOTTOM_CLEARANCE },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: 20 },
   // Web: px-5 pt-7 pb-3 (the horizontal padding is on the container).
   header: { paddingTop: 28, paddingBottom: 12 },
   upper: { fontWeight: "500", textTransform: "uppercase", letterSpacing: 0.6 },

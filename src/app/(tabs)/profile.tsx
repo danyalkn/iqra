@@ -38,14 +38,16 @@ const LOAD_ERROR = "Couldn’t load your entries. Pull down to try again.";
  * the Today page. Personal data only, per DECISIONS "No showing off": no
  * comparisons with other members and no leaderboard here.
  *
- * Insets: on iOS react-native-screens flips the tab screen's first scroll
- * view to automatic content-inset adjustment, which already pads the status
- * bar at the top and the (translucent, minimising) tab bar plus home
- * indicator at the bottom, so adding insets.top here would double the top
- * gap. On Android native tabs wrap the screen in a SafeAreaView that only
- * applies the bottom inset and already clears the tab bar and navigation
- * bar, so the top is ours to pad and the bottom gets a fixed 40 only (same
- * reasoning as LIST_BOTTOM_CLEARANCE on Today).
+ * Insets: the tab screen gets no automatic top inset on either platform (on
+ * iOS 26 react-native-screens does not inset the scroll view for the status
+ * bar and Dynamic Island), so the root View pads insets.top itself and the
+ * ScrollView sits inside it, which also keeps the pull-to-refresh spinner
+ * below the status bar. At the bottom the iOS liquid-glass tab bar floats
+ * over the screen with nothing insetting the scroll view for it, so
+ * insets.bottom (tab bar plus home indicator) is added to the fixed 40. On
+ * Android native tabs wrap the screen in a SafeAreaView whose bottom edge
+ * already clears the tab bar and navigation bar, so the bottom stays a
+ * fixed 40 there (same reasoning as Today and Feed).
  */
 export default function ProfileScreen() {
   const c = useTheme();
@@ -143,121 +145,123 @@ export default function ProfileScreen() {
   const typesLine = TYPES_BY_MODE[mode].map((t) => ENTRY_META[t].label).join(" · ");
 
   return (
-    <ScrollView
-      style={[styles.root, { backgroundColor: c.canvas }]}
-      contentContainerStyle={{
-        paddingTop: Platform.OS === "ios" ? 0 : insets.top,
-        paddingBottom: 40,
-      }}
-      refreshControl={
-        membership ? (
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.muted} />
-        ) : undefined
-      }
-    >
-      <View style={styles.header}>
-        <Text style={[Type.display, { color: c.foreground }]}>Profile</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Settings"
-          onPress={() => router.push("/settings")}
-          hitSlop={8}
-          style={[styles.gear, { backgroundColor: c.surface2 }]}
-        >
-          <SettingsIcon size={20} color={c.muted} />
-        </Pressable>
-      </View>
-
-      <View style={styles.body}>
-        {/* Identity: who is signed in, how they study, which mushaf. */}
-        <Card>
-          <View style={styles.identity}>
-            <Avatar name={displayName} src={profile?.avatar_url} size={72} />
-            <View style={styles.identityText}>
-              <Text style={[Type.title2, { color: c.foreground }]} numberOfLines={1}>
-                {displayName}
-              </Text>
-              {user?.email ? (
-                <Text style={[Type.footnote, { color: c.muted }]} numberOfLines={1}>
-                  {user.email}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-          <View style={styles.pills}>
-            <View style={[styles.pill, { backgroundColor: c.surface2 }]}>
-              <Text style={[Type.caption, { color: c.muted }]}>
-                {mode === "hifz" ? "Memorizing (Hifz)" : "Reading"}
-              </Text>
-            </View>
-            <View style={[styles.pill, { backgroundColor: c.surface2 }]}>
-              <Text style={[Type.caption, { color: c.muted }]}>{mushafLabel}</Text>
-            </View>
-          </View>
-          <Text style={[Type.footnote, styles.types, { color: c.faint }]}>{typesLine}</Text>
-        </Card>
-
-        {membership === null ? (
-          <Text style={[Type.footnote, styles.note, { color: c.muted }]}>
-            Ask the group owner to add you to a circle. Your streak and progress show up here
-            once you start logging.
-          </Text>
-        ) : null}
-
-        {error ? (
-          <Text style={[Type.footnote, styles.note, { color: c.danger }]}>{error}</Text>
-        ) : null}
-
-        {stats ? (
-          <View style={styles.statRow}>
-            <StatCard
-              label="Streak"
-              value={stats.streak}
-              sub={`${stats.streak === 1 ? "day" : "days"} · best ever ${stats.longest}`}
-            />
-            <StatCard
-              label="This month"
-              value={stats.monthDays}
-              sub={`of ${stats.dayOfMonth} ${stats.dayOfMonth === 1 ? "day" : "days"} so far`}
-            />
-          </View>
-        ) : null}
-
-        {progress ? (
-          <WhereYouAre
-            mode={mode}
-            reading={progress.reading}
-            hifz={progress.hifz}
-            lastSabak={progress.lastSabak}
-          />
-        ) : null}
-
-        <Card style={styles.rows}>
-          <NavRow
-            first
-            icon={NotebookPen}
-            iconColor={c.accent}
-            iconBackground={c.accentTint}
-            title="Journal"
-            note="Everything you’ve logged, with your notes"
-            onPress={() => router.push("/journal")}
-          />
-          <NavRow
-            icon={SettingsIcon}
-            iconColor={c.muted}
-            iconBackground={c.surface2}
-            title="Settings"
-            note="Profile, mushaf, reminders, appearance"
+    <View style={[styles.root, { paddingTop: insets.top, backgroundColor: c.canvas }]}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{
+          paddingBottom: Platform.OS === "ios" ? 40 + insets.bottom : 40,
+        }}
+        refreshControl={
+          membership ? (
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.muted} />
+          ) : undefined
+        }
+      >
+        <View style={styles.header}>
+          <Text style={[Type.display, { color: c.foreground }]}>Profile</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
             onPress={() => router.push("/settings")}
-          />
-        </Card>
-      </View>
-    </ScrollView>
+            hitSlop={8}
+            style={[styles.gear, { backgroundColor: c.surface2 }]}
+          >
+            <SettingsIcon size={20} color={c.muted} />
+          </Pressable>
+        </View>
+
+        <View style={styles.body}>
+          {/* Identity: who is signed in, how they study, which mushaf. */}
+          <Card>
+            <View style={styles.identity}>
+              <Avatar name={displayName} src={profile?.avatar_url} size={72} />
+              <View style={styles.identityText}>
+                <Text style={[Type.title2, { color: c.foreground }]} numberOfLines={1}>
+                  {displayName}
+                </Text>
+                {user?.email ? (
+                  <Text style={[Type.footnote, { color: c.muted }]} numberOfLines={1}>
+                    {user.email}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+            <View style={styles.pills}>
+              <View style={[styles.pill, { backgroundColor: c.surface2 }]}>
+                <Text style={[Type.caption, { color: c.muted }]}>
+                  {mode === "hifz" ? "Memorizing (Hifz)" : "Reading"}
+                </Text>
+              </View>
+              <View style={[styles.pill, { backgroundColor: c.surface2 }]}>
+                <Text style={[Type.caption, { color: c.muted }]}>{mushafLabel}</Text>
+              </View>
+            </View>
+            <Text style={[Type.footnote, styles.types, { color: c.faint }]}>{typesLine}</Text>
+          </Card>
+
+          {membership === null ? (
+            <Text style={[Type.footnote, styles.note, { color: c.muted }]}>
+              Ask the group owner to add you to a circle. Your streak and progress show up here
+              once you start logging.
+            </Text>
+          ) : null}
+
+          {error ? (
+            <Text style={[Type.footnote, styles.note, { color: c.danger }]}>{error}</Text>
+          ) : null}
+
+          {stats ? (
+            <View style={styles.statRow}>
+              <StatCard
+                label="Streak"
+                value={stats.streak}
+                sub={`${stats.streak === 1 ? "day" : "days"} · best ever ${stats.longest}`}
+              />
+              <StatCard
+                label="This month"
+                value={stats.monthDays}
+                sub={`of ${stats.dayOfMonth} ${stats.dayOfMonth === 1 ? "day" : "days"} so far`}
+              />
+            </View>
+          ) : null}
+
+          {progress ? (
+            <WhereYouAre
+              mode={mode}
+              reading={progress.reading}
+              hifz={progress.hifz}
+              lastSabak={progress.lastSabak}
+            />
+          ) : null}
+
+          <Card style={styles.rows}>
+            <NavRow
+              first
+              icon={NotebookPen}
+              iconColor={c.accent}
+              iconBackground={c.accentTint}
+              title="Journal"
+              note="Everything you’ve logged, with your notes"
+              onPress={() => router.push("/journal")}
+            />
+            <NavRow
+              icon={SettingsIcon}
+              iconColor={c.muted}
+              iconBackground={c.surface2}
+              title="Settings"
+              note="Profile, mushaf, reminders, appearance"
+              onPress={() => router.push("/settings")}
+            />
+          </Card>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  scroll: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",

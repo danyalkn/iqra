@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AppState,
+  Keyboard,
   Platform,
   Pressable,
   RefreshControl,
@@ -110,14 +111,23 @@ function deviceTimeZone(): string {
   }
 }
 
-/** Clearance under the list so the FAB never covers the last row (web:
- *  pb-28). The tab bar itself is not added here: on iOS react-native-screens
- *  switches the first scroll view in the screen's first-descendant chain to
- *  automatic content-inset adjustment, which already pads the tab bar and
- *  home indicator (RNSScrollViewHelper), and on Android expo-router wraps
- *  the tab screen in a SafeAreaView with the bottom edge applied. Adding
- *  insets.bottom on top would leave a large blank band at the end. */
+/** Clearance above the tab bar so the FAB never covers the last row (web:
+ *  pb-28). The FAB is about 56 tall and sits 20 above the tab bar, so its top
+ *  edge is 76 above it; 112 leaves a 36 gap over that, enough for the last
+ *  row's action buttons (Edit, Delete) to stay tappable. */
 const LIST_BOTTOM_CLEARANCE = 112;
+
+/** Space under the last row. On iOS the liquid-glass tab bar floats over the
+ *  tab screen and nothing insets the scroll view for it, and insets.bottom
+ *  there is the tab bar plus the home indicator (the tab screen has its own
+ *  SafeAreaProvider; the FAB is positioned from the same value in
+ *  fabBottomOffset), so it is added to the clearance that sits above the bar.
+ *  On Android expo-router wraps the tab screen in a SafeAreaView whose bottom
+ *  edge already ends above the bar, so adding it again would leave a blank
+ *  band. */
+function listBottomClearance(insetBottom: number): number {
+  return Platform.OS === "ios" ? LIST_BOTTOM_CLEARANCE + insetBottom : LIST_BOTTOM_CLEARANCE;
+}
 
 /** Web: the FAB sits bottom-5 (20) from the page. On iOS the tab screen has
  *  its own SafeAreaProvider (expo-router NativeTabsView.ios), so
@@ -467,6 +477,11 @@ export default function TodayScreen() {
 
   const handleSave = async (payload: NewEntry) => {
     if (!groupId || !userId) return;
+    // LogSheet calls onClose right after onSave. Dismiss the keyboard first,
+    // synchronously, so its slide-out runs together with the sheet's close
+    // instead of after it; the confetti timer below waits SHEET_CLOSE_MS and
+    // would otherwise start while the keyboard is still on its way down.
+    Keyboard.dismiss();
     setError(null);
     setNotice(null);
     if (editingEntry) {
@@ -570,12 +585,13 @@ export default function TodayScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: c.canvas }]}>
-      {/* First child on purpose: react-native-screens applies the tab bar
-          content inset to the first scroll view in the first-descendant
-          chain, so the FAB and Celebration layers come after it. */}
+      {/* First child on purpose: the FAB, sheet and Celebration layers come
+          after it so they paint above the list. The root pads insets.top
+          itself (no automatic top inset on the tab screen), which also keeps
+          the pull-to-refresh spinner below the status bar. */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingBottom: LIST_BOTTOM_CLEARANCE }}
+        contentContainerStyle={{ paddingBottom: listBottomClearance(insets.bottom) }}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           groupId ? (
