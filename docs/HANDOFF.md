@@ -49,7 +49,7 @@ scripts/gen-icons.mjs  Regenerates those icons from inline SVG (needs sharp)
 Path alias `@/*` -> `src/*`, same as the web app, so `src/lib` imports work
 unchanged.
 
-## What is already done (Phase 0, partial)
+## What is already done (Phase 0 code complete; dev build pending owner)
 
 - [x] Expo project scaffolded (default template, trimmed). `npx tsc --noEmit` passes.
 - [x] `src/lib/` copied: dates, entries, feedGroups, format, khatmah, mushaf,
@@ -61,10 +61,21 @@ unchanged.
       id placeholders `com.qadamtechnologies.iqra` (see Owner tasks).
 - [x] `.env.example` with the public Supabase URL and publishable key.
 - [x] `docs/DECISIONS.md` carries every owner decision from the web build.
-- [x] Placeholder `src/app/index.tsx` that renders a token-styled card and
-      calls a shared lib function, proving the lib compiles under RN.
+- [x] `src/supabase/client.ts` + `secureStorage.ts`: one client, chunked
+      expo-secure-store session adapter, AppState auto-refresh toggle.
+- [x] `src/lib/auth.ts` (Profile type, `isOnboarded`), `src/lib/data.ts`
+      (every web query, takes the client as first arg), `src/lib/deepLinks.ts`.
+- [x] `src/providers/SessionProvider.tsx` and `ThemeProvider.tsx` (system /
+      light / dark override persisted in AsyncStorage, key `iqra:theme`).
+- [x] Route tree with the Stack.Protected auth gate, NativeTabs, Settings
+      as a stack screen, typed routes generated.
+- [x] UI kit: Button, Card, Field (FieldLabel, Input, Textarea, TimeInput),
+      Badge, Avatar, SegmentedControl, Sheet; plus AppMark and Placeholder.
+- [x] Login screen ported (Phase 1 item, pulled forward so the dev build can
+      be exercised end to end). Onboarding is a stub with Sign out.
+- [x] `eas.json` profiles; `expo-dev-client` installed; `npx expo-doctor` clean.
 
-Not done from Phase 0: everything below.
+Not done from Phase 0: the first EAS dev build (needs owner tasks 2 and 4).
 
 ## Owner tasks (cannot be done by an agent)
 
@@ -81,9 +92,14 @@ Do these early; several are long poles.
    `.ShieldConfiguration`, `.ShieldAction`. Must be submitted by the org's
    **Account Holder**, not an Admin. Form and wording in `docs/SCREEN-TIME.md`.
    Expect days to weeks; open a DTS ticket after two silent weeks.
-4. **EAS account**: `npx eas-cli@latest login`, then `eas init` in this repo.
-   Let EAS manage iOS credentials (it will ask for an App Store Connect API
-   key, create one with App Manager role under the org).
+4. **EAS account**: already logged in as `danyal0726` on this machine. Run
+   `npx eas-cli@latest init` in this repo (creates the project on expo.dev
+   and writes `extra.eas.projectId` into app.json; commit that). Then
+   `npx eas-cli@latest build --profile development --platform ios`: say yes
+   to letting EAS manage credentials, sign in with the org Apple ID when
+   asked, and let it create the distribution certificate, the ad-hoc
+   provisioning profile (register your iPhone's UDID when prompted via the
+   link it prints) and the push key.
 5. **APNs key** (.p8): EAS creates it under the org account when prompted.
 6. **Supabase**: generate an Expo access token (expo.dev -> Access tokens)
    and set it as the `EXPO_ACCESS_TOKEN` secret on the edge function when
@@ -98,12 +114,18 @@ update to the Status section at the bottom of this file.
 
 ### Phase 0 - Foundation (single-threaded, one agent)
 
-- [ ] `src/lib/supabase.ts`: one shared client, `expo-secure-store` session
-      adapter, `AppState` listener to start/stop auto refresh, realtime
-      `setAuth` on session change (mirror `reference/web-pwa/lib/supabase/client.ts`).
-- [ ] `src/providers/SessionProvider.tsx`: user + profile, `isOnboarded`
-      (name and mode set), loading state. Port `reference/web-pwa/auth.ts`.
-- [ ] Route structure:
+- [x] `src/supabase/client.ts` (NOT `src/lib/`: it imports react-native's
+      AppState and the lib must stay RN-free): one shared client, chunked
+      `expo-secure-store` session adapter (`secureStorage.ts`; sessions can
+      exceed the old 2 KB keychain item limit), `AppState` listener to
+      start/stop auto refresh. Realtime `setAuth` is already done inside
+      supabase-js on every auth event, so no extra listener; the web
+      `heartbeatCallback` reconnect is ported, `worker: true` dropped.
+- [x] `src/providers/SessionProvider.tsx`: session, user, profile,
+      `isOnboarded`, `loading`, `refreshProfile()`, `signOut()` (local
+      scope). `Profile` + `isOnboarded` live in `src/lib/auth.ts` (pure).
+- [x] Route structure (as below, plus `src/app/index.tsx` redirecting to
+      `/today` and `src/app/(auth)/_layout.tsx`):
   ```
   src/app/_layout.tsx          providers, auth gate (redirect to login / onboarding)
   src/app/(auth)/login.tsx
@@ -112,28 +134,39 @@ update to the Status section at the bottom of this file.
   src/app/(tabs)/today.tsx | feed.tsx | chat.tsx | stats.tsx | journal.tsx
   src/app/settings.tsx         stack screen over tabs
   ```
-- [ ] UI kit in `src/components/ui/`: Button, Card, Field, Badge, Avatar,
-      SegmentedControl, Sheet (bottom sheet, swipe-down dismiss), TabBar is
-      native. Port from `reference/web-pwa/components/ui/`. Lucide icons via
-      `lucide-react-native`.
-- [ ] `src/lib/data.ts`: port every query from `reference/web-pwa/data.ts`
-      to take the shared client. Keep `fetchAll` (PostgREST caps at 1000
-      rows per response). Keep the newest-first safety valve comments.
-- [ ] Deep link handling: scheme `iqra://`, routes `/today?log=<type>&r=<id>`,
-      `/chat`, `/stats#recap` (use `?section=recap` natively).
-- [ ] `eas.json` profiles: development (dev client, internal), preview
-      (internal distribution, Android `buildType: apk`), production.
+- [x] UI kit in `src/components/ui/` (barrel `index.ts`): Button, Card,
+      Field (FieldLabel, Input, Textarea, TimeInput via
+      `@react-native-community/datetimepicker`), Badge, Avatar (expo-image),
+      SegmentedControl, Sheet (Modal + Reanimated + gesture-handler v3 hook
+      API; `dragAnywhere={false}` when the content is a ScrollView). Tab bar
+      is NativeTabs. Lucide via `lucide-react-native` for in-screen icons;
+      tab icons are SF Symbols / Material Symbols.
+- [x] `src/lib/data.ts`: every query ported; each takes `supabase` as its
+      first argument so the file stays RN-free. `fetchAll` and the
+      newest-first comments kept verbatim.
+- [x] Deep links: scheme `iqra://` (app.json). Expo Router resolves
+      `/today`, `/chat`, `/stats` into `(tabs)` directly. Today validates
+      `log` against `TYPES_BY_MODE` and `r` as a UUID; Stats reads
+      `section`. `src/lib/deepLinks.ts#toNativeHref` turns a push `url`
+      (`/stats#recap`) into `/stats?section=recap` for the Phase 3
+      notification-response handler. Known gap: a cold-start deep link while
+      signed out is dropped by the gate (login first, then land on Today).
+- [x] `eas.json` profiles: development (dev client, internal), preview
+      (internal, Android apk), production (autoIncrement).
 - [ ] First dev build on a real iPhone: `eas build --profile development --platform ios`.
+      Blocked on owner tasks 2 (App ID) and 4 (`eas init`); see Status.
 
 ### Phase 1 - Core screens (parallelizable after Phase 0; ultracode OK)
 
 Port each from `reference/web-pwa/`. Keep behavior identical; the web
 components have comments explaining every non-obvious rule.
 
-- [ ] Login (`app/login/LoginForm.tsx`): sign in / sign up toggle, confirm
-      fields, paste allowed, "not configured" state can be dropped.
+- [x] Login (`app/login/LoginForm.tsx`): ported in Phase 0 as
+      `src/app/(auth)/login.tsx`. The gate navigates; the screen never does.
 - [ ] Onboarding (`app/onboarding/OnboardingFlow.tsx`): name, mode, timezone
-      (from device), mushaf.
+      (from device), mushaf. Stub exists at `src/app/onboarding.tsx`; call
+      `refreshProfile()` from `useSession()` after the upsert so the gate
+      flips to the tabs. Drop the web's step 3 (Add to Home Screen).
 - [ ] Today (`app/(app)/today/TodayClient.tsx` + `components/LogSheet.tsx` +
       `SpeedDial.tsx` + `WheelPicker.tsx` + `DayReminders.tsx` +
       `Celebration.tsx` + `EntryRow.tsx`). This is the heart of the app:
@@ -142,6 +175,8 @@ components have comments explaining every non-obvious rule.
 - [ ] Journal (`JournalClient.tsx`, `entryWrites.ts`): all-time entries,
       edit/delete sheets shared with Today.
 - [ ] Settings (`app/(app)/settings/page.tsx` + ProfileSection,
+      frame + ThemeToggle (SegmentedControl on `useThemeContext`) + SignOut
+      already in `src/app/settings.tsx`; add the rest:
       RemindersManager, NotificationsToggle, CelebrateToggle, ThemeToggle,
       MushafSelect, SignOutButton, DeleteAccount). NotificationsToggle
       becomes the Expo push permission flow (Phase 3). DeleteAccount calls
@@ -216,6 +251,23 @@ once Apple approves the entitlement; do not block Phase 3 on it.
 - Timezone: web took it from the profile, set at onboarding from the
   browser. Native: `Intl.DateTimeFormat().resolvedOptions().timeZone` works
   on Hermes; also offer the picker because members travel.
+- Screens get data by calling `src/lib/data.ts` with the shared client:
+  `getMyMembership(supabase)`, `getMyRecentEntries(supabase, groupId, userId)`.
+  `useSession()` gives `user`, `profile`, `refreshProfile`, `signOut`.
+- Auth gate: while `loading` every Stack.Protected guard is false; Expo
+  Router logs a dev-only "All routes in this navigator are protected"
+  warning under the splash. Harmless and expected; do not "fix" it by
+  mounting login early (its autoFocus would pop the keyboard).
+- Gesture handler is v3 (hook API: `usePanGesture`, `GestureDetector`).
+  Callbacks need the `"worklet"` directive to run on the UI thread; hop back
+  with `scheduleOnRN` from `react-native-worklets`. A Modal needs its own
+  `GestureHandlerRootView` (see Sheet).
+- React 19: `ref` is a prop; the kit's Input/Textarea take `ref` directly
+  (no forwardRef). The lint rule `react-hooks/set-state-in-effect` is on;
+  adjust state during render (Sheet) or in callbacks instead.
+- Typed routes live in `.expo/types/router.d.ts` (gitignored). They are
+  regenerated by `npx expo start`; run it once after adding a route or
+  `tsc` will not know the new href.
 - Ultracode: good for Phase 1 and 2 (independent screens). Not for Phase 0,
   3, or 4, which need one consistent thread of decisions.
 - Model guidance from the owner: run Fable 5.1 by default, high or xhigh
@@ -226,7 +278,7 @@ once Apple approves the entitlement; do not block Phase 3 on it.
 
 | Phase | State | Notes |
 |---|---|---|
-| 0 Foundation | partial | Scaffold, libs, tokens, supabase, docs done. Supabase client, session, routes, UI kit, data.ts, eas.json, first dev build remain. |
+| 0 Foundation | code complete, build pending | Everything in the Phase 0 list is built, typechecked and linted (2026-10-16). Only the first EAS dev build remains, blocked on owner tasks 2 (App ID in App Store Connect) and 4 (`eas init`). Login was ported early; onboarding is a stub. |
 | 1 Core screens | not started | |
 | 2 Social + stats | not started | |
 | 3 Push + TestFlight | not started | |
