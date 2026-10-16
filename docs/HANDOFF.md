@@ -209,18 +209,40 @@ components have comments explaining every non-obvious rule.
 
 ### Phase 2 - Social and stats (parallelizable; ultracode OK)
 
-- [ ] Feed (`FeedClient.tsx`, `lib/feedGroups.ts`, `lib/nudges.ts`):
-      grouped activity, nudge button with 15 s re-nudge cooldown, realtime.
-- [ ] Chat (`ChatClient.tsx`, 1,722 lines, the hardest port). Port, do not
-      redesign: realtime join/rejoin with fresh topic per join, REST resync
-      on every (re)join, UTC parsing of offset-less timestamps, read
-      frontier, reactions, replies, swipe-to-reply, long-press menu,
-      @mention autocomplete and `@all`, search, mute. Use `FlashList` or
-      inverted `FlatList`; keyboard handling via
-      `react-native-keyboard-controller`.
-- [ ] Stats (`StatsClient.tsx`, ProgressCard, KhatmahCard,
-      HifzBreakdownCard, chartKit): pick the chart lib, port the four cards,
-      recap section reachable by deep link.
+Ported 2026-10-16 with one workflow of five agents (Feed, Chat list,
+Chat composer, Stats charts, Stats screen) against pinned contracts,
+then an adversarial review workflow (three lenses, three skeptics per
+finding, one fixer per unit). Native modules added: `@shopify/flash-list`,
+`react-native-keyboard-controller`, `expo-clipboard`; `KeyboardProvider`
+is mounted in the root layout. The dev client must be rebuilt before the
+Chat tab can load.
+
+- [x] Feed (`src/app/(tabs)/feed.tsx` + `src/components/feed/`): grouped
+      activity (one card per person per day), logged-today strip, nudge
+      pills with the 15 s cooldown seeded from `getMyRecentNudges`, two-tap
+      delete of your own entries, realtime INSERT on `log_entries`, refetch
+      on focus and foreground return, error state with retry.
+- [x] Chat (`src/app/(tabs)/chat.tsx` + `src/components/chat/`): the web
+      reconnect logic ported line for line in `useChatSync.ts` (fresh
+      topic per join, REST resync on every (re)join, backoff, `ensureLive`
+      on foreground return, 20 s safety poll while visible, expired-token
+      and anon-downgrade retries), read frontier, reactions, replies,
+      swipe-to-reply and swipe-left-to-reveal-times (gesture-handler v3),
+      long-press overlay (react, reply, copy), @mention typeahead and
+      `@all`, members sheet with the mute toggle and the owner-only add
+      member search, FlashList 2 (non-inverted, renders from the bottom)
+      inside keyboard-controller's `KeyboardAvoidingView`.
+- [x] Stats / Insights (`src/app/(tabs)/stats.tsx` + `src/components/stats/`):
+      chartKit as `useChartColors` + `useChartFont` (Skia `matchFont`) +
+      `ChartTooltip` + `useChartPress`, a shared `PagesBarChart`, the three
+      cards (ProgressCard, KhatmahCard, HifzBreakdownCard as three small
+      multiples), recap card reachable by `?section=recap` (scrolls once,
+      then clears the param), stat tiles, month browser, leaderboard,
+      insights with a `RichText` parser for the engine's `**bold**` spans,
+      heatmap, coverage sheet, Journal link. Personal scope only outside
+      the leaderboard.
+- [ ] Device verification on the owner's iPhone after the dev-client
+      rebuild (checklist in the Phase 2 working notes below).
 
 ### Phase 3 - Push, deep links, first TestFlight (single-threaded)
 
@@ -349,11 +371,133 @@ once Apple approves the entitlement; do not block Phase 3 on it.
     lands on Today with no flash; (9) FAB and last rows clear the liquid-glass
     tab bar in both its full and minimized states; (10) dark mode on every
     screen.
+- Phase 2 notes (2026-10-16):
+  - `useNow()` moved to `src/hooks/use-now.ts` (optional tick interval);
+    Feed ticks once a second while a nudge cooldown runs. Every screen
+    derives `today` from it, never from a bare `Date.now()` in render.
+  - Feed, Chat and Stats refetch on every tab focus instead of consuming
+    the `entryWrites` "entries changed" flag: Today consumes that flag on
+    its own focus, so a second consumer would race it. Five members make
+    the extra queries negligible.
+  - Several `src/lib/data.ts` helpers swallow errors (`getGroupMembers`,
+    `getGroupEntries`, `getGroupMessages`, `getGroupReactions`,
+    `getGroupChatReads`, `getMyRecentNudges` return `[]`). Feed and Chat
+    run those selects natively (same query) so a dead network is an error
+    state with retry, not an empty circle. Candidate lib fix to mirror to
+    the web: return or throw the error as `fetchAll` now does.
+  - Web bug to mirror: the web `FeedClient` realtime handler files
+    `payload.new` by `logged_at` without the bare-timestamp-is-UTC guard
+    the chat has (`parseTs`); a live insert can land on the wrong local
+    day until reload. Native normalises it (`utcIso` in `feed.tsx`).
+  - Chat keyboard geometry (iOS): the screen root reaches the window
+    bottom under the translucent tab bar, so the composer pads
+    `insets.bottom` itself and keyboard-controller's `KeyboardAvoidingView`
+    runs with `keyboardVerticalOffset = -insets.bottom` and
+    `automaticOffset` so the field ends exactly on the keyboard. Android:
+    composer pads 8, offset 0. If the field sits too high or low on
+    device, adjust `KEYBOARD_GAP` / the offset in `chat.tsx`.
+  - Chat list: FlashList 2 non-inverted with
+    `maintainVisibleContentPosition { startRenderingFromBottom,
+    autoscrollToBottomThreshold: 120 }`, no pull-to-refresh (a bottom
+    anchored chat reads pull-down as "load older", which the 100-message
+    window never offered). Own sends always scroll to the end; others'
+    only when within 120 of the bottom. Double tap, long press and the
+    per-row pan are keyed by message id so recycled cells cannot inherit
+    a gesture. Reaction chips drop the web's pop animation for the same
+    reason.
+  - Chat composer: return inserts a newline and only the Send button
+    sends (phones have no Shift+Enter). Typeahead has no arrow-key
+    navigation; the first row is active and any row picks on press-in.
+    Search and add-member failures show an error line (the web ignored
+    both).
+  - Chat first load runs on the tab's first focus (the web's window
+    focus handler), not in a mount effect: `react-hooks/set-state-in-effect`
+    sees through the sync helpers. `visible` = focused AND AppState
+    active; `markRead` and the 20 s poll both gate on it because
+    NativeTabs keeps every tab mounted.
+  - Charts: victory-native hard-codes d3 `nice()` on the y scale, so the
+    Juz axis of the reading bookmark chart runs 0..650 for the 604-page
+    mushaf instead of 1..604 (ticks and line land in the same places).
+    The "1 khatmah" reference line now shows from 60% of a khatmah onward
+    (recharts' default `ifOverflow="discard"` hid it on the web until the
+    auto domain passed 604, which made the threshold a no-op); to mirror
+    the web's actual behaviour delete the `showKhatmahLine ? total : 0`
+    term in `ReadingView`'s `cumTicks` memo. Press tooltips show while a
+    finger is held (victory's press activates after a 100 ms long press
+    so quick swipes still scroll). `useChartFont` caches one Skia
+    typeface per size (iOS "Helvetica", Android "sans-serif"); a throw
+    yields `null` and labels are skipped rather than crashing.
+  - `SegmentedControl` renders subhead text at both sizes; the
+    Memorizing / Reading toggle in ProgressCard and the four-way hifz
+    filter are therefore a little taller than the web's caption pills. A
+    real `sm` size in the kit would fix both.
+  - Review pass (2026-10-16): 38 findings from three lenses (parity,
+    platform, data), 28 confirmed by at least two of three skeptics and
+    applied. Cross-cutting fixes made in the main session afterwards:
+    - Shared lib fix to mirror to the web repo: `getMyMembership` in
+      `src/lib/data.ts` now throws on a request error. Before, a dead
+      network at launch read as "not in a circle" on every group screen
+      (the web redirects to the same placeholder on a failed read).
+      `useMembership` no longer caches a failed read: it stays `undefined`
+      with a new `failed` flag and retries on foreground return, on mount
+      and on `refresh()`. Feed, Chat and Stats keep their own second-opinion
+      membership reads as belt and braces (comments say so).
+    - Shared lib change to mirror: `currentStreak(loggedDays, tz, now =
+      Date.now())` takes the clock as an argument. Under the React Compiler
+      a bare call was memoized on the logged days alone, so a resident tab
+      kept yesterday's streak past midnight and the 3 AM cutoff. Today,
+      Profile and Stats pass `useNow()`; Profile now derives `today` from
+      `useNow()` too (it used a bare `todayLocal(tz)`).
+    - Stats carries throwing copies of `getGroupMembers` / `getGroupEntries`
+      (`getGroupMembersStrict` / `getGroupEntriesStrict` in `stats.tsx`);
+      Feed and Chat do the same inline. Fold them back once the shared
+      helpers surface their errors.
+    - Chat list: FlashList's `autoscrollToBottomThreshold` is a ratio of
+      the viewport, not pixels (`useBoundDetection.js`), so it was dropped;
+      following the bottom is done only by the screen's own gated
+      `scrollToEnd` (own sends always, others' within 120 px).
+    - Feed: a refetch merges instead of replacing (deleted ids filtered,
+      realtime rows that arrived during the fetch kept), so a focus refetch
+      cannot resurrect a deleted entry or drop a live insert.
+    - Chat: a send whose id a sync already merged drops the temp row
+      (no duplicate FlashList keys); reaction settle steps replace by
+      message_id + user_id; the reactors sheet freezes its list while
+      sliding out; the long-press overlay waits for the keyboard to hide
+      before measuring; bubbles expose react / reply / copy as
+      accessibility actions.
+    - Stats: recap deep-link scroll subtracts the top inset; the selected
+      month resets on every focus (the web remounted); AppState "active"
+      reloads the focused tab; the heatmap tooltip renders only once
+      measured.
+  - Device checklist for the Phase 2 build: (1) Feed: logged-today strip
+    ticks match Today, nudge pill counts down 15 s and re-enables, a
+    second device's log appears live, two-tap delete round-trips to Today;
+    (2) Chat: field sits exactly on the keyboard with the tab bar hidden,
+    swipe down on the composer dismisses it, list stays pinned when the
+    keyboard opens, swipe right on a message replies (haptic), swipe left
+    reveals times for every row, long press shows the emoji pill and the
+    Reply / Copy menu placed above or below as room allows, double tap
+    hearts, read-receipt avatars sit under the right message, a message
+    sent from another device arrives, background the app for >15 s and
+    return (messages sent meanwhile appear), @ typeahead inserts the name
+    with the caret after it, members sheet mute toggle persists, owner
+    sees Add member; (3) Insights: axis labels render on both platforms
+    (if a chart has no labels `matchFont` threw), press-and-hold shows
+    the tooltip and a quick swipe still scrolls, the trailing dot on the
+    line charts is a full circle, the tallest-week label in Sabak / Sabak
+    Para / Dhor is not clipped, the Sunday recap push scrolls to "Your
+    week" once (also when the tab was left on Group), heatmap tooltip
+    placement on the edge columns, memory after several visits (six Skia
+    canvases live on the tab, issue #630); (4) dark mode on all three.
 - Ultracode: good for Phase 1 and 2 (independent screens). Not for Phase 0,
   3, or 4, which need one consistent thread of decisions.
-- Model guidance from the owner: run Fable 5.1 by default, high or xhigh
-  effort for chat, push, and native work. Use Xcode 26's Claude Agent only
-  for the Swift extension targets and signing issues, never for RN code.
+- Model guidance from the owner (revised 2026-10-16): the main session runs
+  Fable 5.1 and only orchestrates, pins contracts, reads agent reports,
+  does cross-cutting fixes, verifies and commits. Subagents and workflow
+  agents run on Sonnet by default and Opus for the harder units (Chat
+  realtime, charts, final review); never Haiku. High or xhigh effort for
+  chat, push, and native work. Use Xcode 26's Claude Agent only for the
+  Swift extension targets and signing issues, never for RN code.
 
 ## Status
 
@@ -361,7 +505,7 @@ once Apple approves the entitlement; do not block Phase 3 on it.
 |---|---|---|
 | 0 Foundation | done | Built, typechecked, linted and verified on the owner's iPhone via an EAS dev build (2026-10-16). Login was ported early; onboarding is a stub. App Store Connect app record still needed before Phase 3 `eas submit`. |
 | 1 Core screens | code complete | All five screens, the shared log kit and the chart decision landed 2026-10-16 (typecheck, lint, expo-doctor clean; adversarial review pass applied). Needs a dev-client rebuild (expo-haptics, Skia) and the device checklist in the working notes. Stubs by design: NotificationsToggle and DeleteAccount wait for Phase 3. |
-| 2 Social + stats | not started | |
+| 2 Social + stats | code complete | Feed, Chat and Insights ported 2026-10-16 (typecheck, lint clean; adversarial review pass applied). Needs a dev-client rebuild (flash-list, keyboard-controller, expo-clipboard) and the Phase 2 device checklist. |
 | 3 Push + TestFlight | not started | |
 | 4 Screen Time | not started | Entitlement requests: NOT YET FILED (owner task 3) |
 | 5 Retire PWA | not started | |
