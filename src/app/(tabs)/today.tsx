@@ -552,13 +552,17 @@ export default function TodayScreen() {
   };
 
   const handleDelete = async (id: string) => {
-    const prev = entries;
     setEntries((p) => p.filter((e) => e.id !== id));
     const error = await deleteEntry(id);
     if (error) {
-      setEntries(prev);
+      // An error does not mean the row survived: the request can fail after
+      // the server committed (the simulator check saw a deleted row come back
+      // with this message). Restoring a snapshot would also undo anything
+      // that changed meanwhile, so re-read the list instead; the row returns
+      // only if it is really still there.
       setError(error);
       failHaptic();
+      void loadToday();
     }
   };
 
