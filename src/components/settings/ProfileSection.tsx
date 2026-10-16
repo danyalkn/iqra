@@ -127,6 +127,7 @@ export function ProfileSection() {
 
             <FieldLabel>Display name</FieldLabel>
             <Input
+              accessibilityLabel="Display name"
               value={name}
               onChangeText={setName}
               maxLength={40}
@@ -145,6 +146,7 @@ export function ProfileSection() {
             <View style={styles.block}>
               <FieldLabel>Time zone</FieldLabel>
               <Input
+                accessibilityLabel="Time zone"
                 value={timezone}
                 onChangeText={setTimezone}
                 autoCapitalize="none"

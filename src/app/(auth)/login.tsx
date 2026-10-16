@@ -137,6 +137,7 @@ export default function LoginScreen() {
             autoComplete="email"
             textContentType="emailAddress"
             autoFocus
+            accessibilityLabel="Email"
             placeholder="you@email.com"
             value={email}
             onChangeText={setEmail}
@@ -148,6 +149,7 @@ export default function LoginScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="off"
+              accessibilityLabel="Confirm email"
               placeholder="Confirm email"
               value={confirmEmail}
               onChangeText={setConfirmEmail}
@@ -159,6 +161,7 @@ export default function LoginScreen() {
               autoCapitalize="none"
               autoComplete={mode === "signin" ? "current-password" : "new-password"}
               textContentType={mode === "signin" ? "password" : "newPassword"}
+              accessibilityLabel="Password"
               placeholder="Password"
               value={password}
               onChangeText={setPassword}
@@ -181,6 +184,7 @@ export default function LoginScreen() {
               autoCapitalize="none"
               autoComplete="new-password"
               textContentType="newPassword"
+              accessibilityLabel="Confirm password"
               placeholder="Confirm password"
               value={confirm}
               onChangeText={setConfirm}
