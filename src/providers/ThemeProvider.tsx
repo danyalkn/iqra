@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useColorScheme } from "react-native";
+import { Appearance, useColorScheme } from "react-native";
 
 import { Colors, type Theme } from "@/constants/theme";
 import { PREF_KEYS, readPref, writePref } from "@/storage/prefs";
@@ -25,6 +25,14 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+/** Push the preference down to the native layer so the keyboard, alerts and
+ *  other native surfaces follow the in-app choice, not just the system.
+ *  RN 0.88's setColorScheme takes "auto" (not null) to drop the override and
+ *  follow the system again. */
+function applyNativeScheme(preference: ThemePreference) {
+  Appearance.setColorScheme(preference === "system" ? "auto" : preference);
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const system = useColorScheme();
   const [preference, setPreferenceState] = useState<ThemePreference>("system");
@@ -33,7 +41,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     readPref(PREF_KEYS.theme).then((saved) => {
       if (cancelled) return;
-      if (saved === "light" || saved === "dark") setPreferenceState(saved);
+      if (saved === "light" || saved === "dark") {
+        // Runs in the async callback, so this is not a synchronous
+        // setState-in-effect; the native side must be told once at startup too.
+        applyNativeScheme(saved);
+        setPreferenceState(saved);
+      }
     });
     return () => {
       cancelled = true;
@@ -49,6 +62,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       scheme,
       colors: Colors[scheme],
       setPreference: (next) => {
+        applyNativeScheme(next);
         setPreferenceState(next);
         void writePref(PREF_KEYS.theme, next === "system" ? null : next);
       },
