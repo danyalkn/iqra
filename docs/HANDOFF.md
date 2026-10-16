@@ -259,10 +259,11 @@ once Apple approves the entitlement; do not block Phase 3 on it.
   `useSession()` gives `user`, `profile`, `refreshProfile`, `signOut`.
 - The session is stored under `iqra-auth` (explicit `storageKey`) so
   SessionProvider can hard-clear it if `signOut()` returns an error.
-- Auth gate: while `loading` every Stack.Protected guard is false; Expo
-  Router logs a dev-only "All routes in this navigator are protected"
-  warning under the splash. Harmless and expected; do not "fix" it by
-  mounting login early (its autoFocus would pop the keyboard).
+- Auth gate: `src/app/index.tsx` is the unguarded anchor. It renders null
+  while the session loads (splash covers it) and then redirects to login,
+  onboarding or /today. Every other route sits behind a Stack.Protected
+  guard. Do not guard `index`: on the first device build a cold start at
+  `/` resolved while every guard was false and stuck on "Unmatched Route".
 - Gesture handler is v3 (hook API: `usePanGesture`, `GestureDetector`).
   Callbacks need the `"worklet"` directive to run on the UI thread; hop back
   with `scheduleOnRN` from `react-native-worklets`. A Modal needs its own

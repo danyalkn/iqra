@@ -26,8 +26,12 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
  *   no session            -> (auth)/login
  *   session, no profile   -> onboarding (name + mode missing)
  *   session + onboarded   -> (tabs), settings
- * Stack.Protected redirects as soon as the guard flips (sign-in, sign-out,
- * onboarding saved), so screens never redirect by hand.
+ * `index` is never guarded: it is the anchor every guarded route falls
+ * back to, and it redirects once the session is known. Without that, a
+ * cold start at `/` resolved while every guard was still false and the
+ * router landed on its not-found screen for good. Stack.Protected then
+ * redirects as soon as a guard flips (sign-in, sign-out, onboarding
+ * saved), so screens never redirect by hand.
  */
 export default function RootLayout() {
   return (
@@ -70,8 +74,8 @@ function RootNavigator() {
     },
   };
 
-  // While the session loads nothing is mounted behind the splash; every
-  // guard is false, so the stack has no screen to flash.
+  // While the session loads only `index` (which renders null) is reachable
+  // behind the splash, so no screen flashes and nothing autofocuses.
   return (
     <NavigationThemeProvider value={navTheme}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
@@ -81,8 +85,8 @@ function RootNavigator() {
           contentStyle: { backgroundColor: c.canvas },
         }}
       >
+        <Stack.Screen name="index" />
         <Stack.Protected guard={!loading && signedIn && isOnboarded}>
-          <Stack.Screen name="index" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="settings" options={{ presentation: "card" }} />
         </Stack.Protected>
