@@ -136,9 +136,12 @@ update to the Status section at the bottom of this file.
   src/app/_layout.tsx          providers, auth gate (redirect to login / onboarding)
   src/app/(auth)/login.tsx
   src/app/onboarding.tsx
-  src/app/(tabs)/_layout.tsx   NativeTabs: Today, Feed, Chat, Insights, Journal
-  src/app/(tabs)/today.tsx | feed.tsx | chat.tsx | stats.tsx | journal.tsx
+  src/app/(tabs)/_layout.tsx   NativeTabs: Today, Feed, Chat, Insights, Profile
+  src/app/(tabs)/today.tsx | feed.tsx | chat.tsx | stats.tsx | profile.tsx
   src/app/settings.tsx         stack screen over tabs
+  src/app/journal.tsx          stack screen over tabs, opened from Today
+  (Owner decision 2026-10-16: Profile replaced Journal as the fifth tab;
+  the system tab bar is not to be restyled.)
   ```
 - [x] UI kit in `src/components/ui/` (barrel `index.ts`): Button, Card,
       Field (FieldLabel, Input, Textarea, TimeInput via
@@ -181,7 +184,11 @@ components have comments explaining every non-obvious rule.
       hifz fan-out vs reading FAB, 3 AM backdating window, "Remind me" pill,
       day-reminder presets, confetti. Haptics on save.
 - [ ] Journal (`JournalClient.tsx`, `entryWrites.ts`): all-time entries,
-      edit/delete sheets shared with Today.
+      edit/delete sheets shared with Today. It is a stack screen
+      (`src/app/journal.tsx`) opened from the Today header, not a tab.
+- [ ] Profile tab (`src/app/(tabs)/profile.tsx`): new, no web equivalent.
+      Owner to decide the content; default proposal: avatar, name, mode,
+      mushaf and streak summary, with rows into Journal and Settings.
 - [ ] Settings (`app/(app)/settings/page.tsx` + ProfileSection,
       frame + ThemeToggle (SegmentedControl on `useThemeContext`) + SignOut
       already in `src/app/settings.tsx`; add the rest:

@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { CalendarCheck, Settings as SettingsIcon } from "lucide-react-native";
+import { CalendarCheck, NotebookPen, Settings as SettingsIcon } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -38,15 +38,26 @@ export default function TodayScreen() {
             : "The Today screen lands in the next build."
         }
         headerRight={
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Settings"
-            onPress={() => router.push("/settings")}
-            hitSlop={8}
-            style={[styles.gear, { backgroundColor: c.surface2 }]}
-          >
-            <SettingsIcon size={20} color={c.muted} />
-          </Pressable>
+          <View style={styles.headerButtons}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Journal"
+              onPress={() => router.push("/journal")}
+              hitSlop={8}
+              style={[styles.gear, { backgroundColor: c.surface2 }]}
+            >
+              <NotebookPen size={20} color={c.muted} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
+              onPress={() => router.push("/settings")}
+              hitSlop={8}
+              style={[styles.gear, { backgroundColor: c.surface2 }]}
+            >
+              <SettingsIcon size={20} color={c.muted} />
+            </Pressable>
+          </View>
         }
       >
         {profile?.display_name ? (
@@ -61,5 +72,6 @@ export default function TodayScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  headerButtons: { flexDirection: "row", gap: 8 },
   gear: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
 });

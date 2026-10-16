@@ -3,10 +3,13 @@ import { NativeTabs } from "expo-router/native-tabs";
 import { useTheme } from "@/hooks/use-theme";
 
 /**
- * The app's five tabs (HANDOFF § Phase 0). The web tab bar was Today, Feed,
- * Stats, Chat with Journal reached from Today; native promotes Journal to a
- * tab and labels Stats "Insights" like its page title. SF Symbols on iOS,
- * Material Symbols on Android (Lucide stays for in-screen icons).
+ * The app's five tabs: Today, Feed, Chat, Insights, Profile. The web tab
+ * bar was Today, Feed, Stats, Chat with Journal reached from Today; native
+ * keeps Journal as a stack screen off Today, labels Stats "Insights" like
+ * its page title, and adds Profile as the fifth tab (owner decision
+ * 2026-10-16). SF Symbols on iOS, Material Symbols on Android (Lucide
+ * stays for in-screen icons). The bar itself is the system one; do not
+ * restyle it.
  */
 export default function TabsLayout() {
   const c = useTheme();
@@ -37,9 +40,9 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Insights</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} md="bar_chart" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="journal">
-        <NativeTabs.Trigger.Label>Journal</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: "book.closed", selected: "book.closed.fill" }} md="menu_book" />
+      <NativeTabs.Trigger name="profile">
+        <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "person.crop.circle", selected: "person.crop.circle.fill" }} md="account_circle" />
       </NativeTabs.Trigger>
     </NativeTabs>
   );
