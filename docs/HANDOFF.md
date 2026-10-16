@@ -72,6 +72,9 @@ Do these early; several are long poles.
 
 1. ~~Pick the bundle id~~ Done: `com.qadamtechnologies.iqra` (Qadam Technologies
    Inc., the org on the Apple account). Already set in `app.json`.
+   If Apple reports it as taken when creating the App ID, fall back to
+   `com.qadamtech.iqra`: find-and-replace in `app.json`, this file, and
+   `docs/SCREEN-TIME.md`, then commit.
 2. **Create the App ID + app record** in App Store Connect under the org.
 3. **File the Family Controls (Distribution) requests on day one.** Four of
    them: the app bundle id plus `.DeviceActivityMonitor`,
