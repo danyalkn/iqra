@@ -11,7 +11,8 @@ import {
 } from "react";
 
 import { isOnboarded as computeOnboarded, type Profile } from "@/lib/auth";
-import { supabase } from "@/supabase/client";
+import { AUTH_STORAGE_KEY, supabase } from "@/supabase/client";
+import { secureStorage } from "@/supabase/secureStorage";
 
 /**
  * Who is signed in and their profile (ported from reference/web-pwa/auth.ts,
@@ -72,12 +73,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // profile, then let the gate render. onAuthStateChange also fires
     // INITIAL_SESSION, but awaiting getSession() here keeps `loading`
     // honest even if that event is delayed.
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (cancelled) return;
-      setSession(data.session);
-      await syncProfile(data.session?.user.id ?? null);
-      if (!cancelled) setLoading(false);
-    });
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (cancelled) return;
+        setSession(data.session);
+        await syncProfile(data.session?.user.id ?? null);
+      } catch (e) {
+        // A keychain read failure must not strand the app behind the splash;
+        // fall through to the signed-out gate.
+        console.warn("Session restore failed", e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
       if (cancelled) return;
@@ -104,7 +113,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     // Local scope: drop this device's session and tokens. The gate flips as
     // soon as onAuthStateChange reports SIGNED_OUT.
-    await supabase.auth.signOut({ scope: "local" });
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) {
+      // supabase-js bails before clearing storage when the current session
+      // cannot be loaded or refreshed. The user asked to leave, so clear the
+      // stored session ourselves and flip the gate.
+      console.warn("Sign out did not complete cleanly", error);
+      await secureStorage.removeItem(AUTH_STORAGE_KEY);
+      activeUserId.current = null;
+      setProfile(null);
+      setSession(null);
+    }
   }, []);
 
   const value = useMemo<SessionContextValue>(

@@ -254,6 +254,8 @@ once Apple approves the entitlement; do not block Phase 3 on it.
 - Screens get data by calling `src/lib/data.ts` with the shared client:
   `getMyMembership(supabase)`, `getMyRecentEntries(supabase, groupId, userId)`.
   `useSession()` gives `user`, `profile`, `refreshProfile`, `signOut`.
+- The session is stored under `iqra-auth` (explicit `storageKey`) so
+  SessionProvider can hard-clear it if `signOut()` returns an error.
 - Auth gate: while `loading` every Stack.Protected guard is false; Expo
   Router logs a dev-only "All routes in this navigator are protected"
   warning under the splash. Harmless and expected; do not "fix" it by

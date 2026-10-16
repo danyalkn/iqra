@@ -20,9 +20,14 @@ export function isSupabaseConfigured(): boolean {
   return Boolean(SUPABASE_URL && SUPABASE_KEY);
 }
 
+/** Where supabase-js keeps the session; SessionProvider clears it directly
+ *  if a sign-out cannot complete through the API. */
+export const AUTH_STORAGE_KEY = "iqra-auth";
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: {
     storage: secureStorage,
+    storageKey: AUTH_STORAGE_KEY,
     persistSession: true,
     autoRefreshToken: true,
     // Native has no URL to read a session from.

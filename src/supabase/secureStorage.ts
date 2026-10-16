@@ -12,8 +12,14 @@ import * as SecureStore from "expo-secure-store";
  * Layout per logical key K:
  *   K           -> "chunks:<n>" (manifest) or, for small values, the value
  *   K.0 .. K.n-1 -> the chunks
- * Chunk boundaries are by UTF-16 code unit; the keychain stores strings, so a
- * split inside a surrogate pair round-trips fine as long as we join in order.
+ * Chunks are cut on UTF-16 code units but never inside a surrogate pair: the
+ * JS-to-native bridge is UTF-8 and cannot carry a lone surrogate, so a cut
+ * through an emoji in user metadata would corrupt the stored JSON.
+ *
+ * All three operations run through one promise-chain mutex. supabase-js is
+ * lockless on React Native and re-reads storage on every getSession(), so a
+ * token-refresh write overlapping a data query's read could otherwise see
+ * the old manifest with a mix of old and new chunks.
  */
 const CHUNK = 1500;
 const MANIFEST = "chunks:";
@@ -36,6 +42,27 @@ async function removeChunks(key: string, count: number): Promise<void> {
   );
 }
 
+/** Split without cutting between a high and a low surrogate. */
+function chunksOf(value: string): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < value.length) {
+    let cut = Math.min(i + CHUNK, value.length);
+    const code = value.charCodeAt(cut - 1);
+    if (cut < value.length && code >= 0xd800 && code <= 0xdbff) cut -= 1;
+    out.push(value.slice(i, cut));
+    i = cut;
+  }
+  return out;
+}
+
+let queue: Promise<unknown> = Promise.resolve();
+function serialized<T>(task: () => Promise<T>): Promise<T> {
+  const next = queue.then(task, task);
+  queue = next.catch(() => undefined);
+  return next;
+}
+
 async function readManifestCount(key: string): Promise<number> {
   const head = await SecureStore.getItemAsync(key, OPTIONS);
   if (head && head.startsWith(MANIFEST)) {
@@ -46,55 +73,56 @@ async function readManifestCount(key: string): Promise<number> {
 }
 
 export const secureStorage = {
-  async getItem(key: string): Promise<string | null> {
-    const head = await SecureStore.getItemAsync(key, OPTIONS);
-    if (head == null) return null;
-    if (!head.startsWith(MANIFEST)) return head;
-    const n = Number(head.slice(MANIFEST.length));
-    if (!Number.isFinite(n) || n <= 0) return null;
-    const parts = await Promise.all(
-      Array.from({ length: n }, (_, i) =>
-        SecureStore.getItemAsync(chunkKey(key, i), OPTIONS),
-      ),
-    );
-    // A missing chunk means a torn write; treat the session as absent rather
-    // than hand supabase-js a truncated JSON string.
-    if (parts.some((p) => p == null)) return null;
-    return parts.join("");
-  },
-
-  async setItem(key: string, value: string): Promise<void> {
-    const previous = await readManifestCount(key);
-    if (value.length <= CHUNK) {
-      await SecureStore.setItemAsync(key, value, OPTIONS);
-      if (previous > 0) await removeChunks(key, previous);
-      return;
-    }
-    const n = Math.ceil(value.length / CHUNK);
-    // Write chunks first, then the manifest, so a reader never sees a
-    // manifest pointing at chunks that are not there yet.
-    await Promise.all(
-      Array.from({ length: n }, (_, i) =>
-        SecureStore.setItemAsync(
-          chunkKey(key, i),
-          value.slice(i * CHUNK, (i + 1) * CHUNK),
-          OPTIONS,
-        ),
-      ),
-    );
-    await SecureStore.setItemAsync(key, `${MANIFEST}${n}`, OPTIONS);
-    if (previous > n) {
-      await Promise.all(
-        Array.from({ length: previous - n }, (_, i) =>
-          SecureStore.deleteItemAsync(chunkKey(key, n + i), OPTIONS),
+  getItem(key: string): Promise<string | null> {
+    return serialized(async () => {
+      const head = await SecureStore.getItemAsync(key, OPTIONS);
+      if (head == null) return null;
+      if (!head.startsWith(MANIFEST)) return head;
+      const n = Number(head.slice(MANIFEST.length));
+      if (!Number.isFinite(n) || n <= 0) return null;
+      const parts = await Promise.all(
+        Array.from({ length: n }, (_, i) =>
+          SecureStore.getItemAsync(chunkKey(key, i), OPTIONS),
         ),
       );
-    }
+      // A missing chunk means a torn write; treat the session as absent rather
+      // than hand supabase-js a truncated JSON string.
+      if (parts.some((p) => p == null)) return null;
+      return parts.join("");
+    });
   },
 
-  async removeItem(key: string): Promise<void> {
-    const n = await readManifestCount(key);
-    await SecureStore.deleteItemAsync(key, OPTIONS);
-    if (n > 0) await removeChunks(key, n);
+  setItem(key: string, value: string): Promise<void> {
+    return serialized(async () => {
+      const previous = await readManifestCount(key);
+      if (value.length <= CHUNK) {
+        await SecureStore.setItemAsync(key, value, OPTIONS);
+        if (previous > 0) await removeChunks(key, previous);
+        return;
+      }
+      const chunks = chunksOf(value);
+      const n = chunks.length;
+      // Write chunks first, then the manifest, so a reader never sees a
+      // manifest pointing at chunks that are not there yet.
+      await Promise.all(
+        chunks.map((chunk, i) => SecureStore.setItemAsync(chunkKey(key, i), chunk, OPTIONS)),
+      );
+      await SecureStore.setItemAsync(key, `${MANIFEST}${n}`, OPTIONS);
+      if (previous > n) {
+        await Promise.all(
+          Array.from({ length: previous - n }, (_, i) =>
+            SecureStore.deleteItemAsync(chunkKey(key, n + i), OPTIONS),
+          ),
+        );
+      }
+    });
+  },
+
+  removeItem(key: string): Promise<void> {
+    return serialized(async () => {
+      const n = await readManifestCount(key);
+      await SecureStore.deleteItemAsync(key, OPTIONS);
+      if (n > 0) await removeChunks(key, n);
+    });
   },
 };
