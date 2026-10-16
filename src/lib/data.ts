@@ -104,17 +104,22 @@ export async function getGroupPagesAllTime(
   );
 }
 
-/** The current user's first group membership (the app assumes one circle). */
+/** The current user's first group membership (the app assumes one circle).
+ *  Throws on a request error: null means a confirmed "not in a circle", and
+ *  a dead network must not read as that (every group screen shows a
+ *  placeholder on null). (Fix to mirror to the web repo, where a failed read
+ *  also redirects to the "not in a circle" placeholder.) */
 export async function getMyMembership(
   supabase: Client,
 ): Promise<Membership | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("group_members")
     .select("group_id, role, groups(name)")
     .order("joined_at", { ascending: true })
     .limit(1)
     .maybeSingle();
 
+  if (error) throw error;
   if (!data) return null;
   const group = data.groups as unknown as { name: string } | null;
   return {

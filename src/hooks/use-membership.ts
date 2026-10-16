@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { AppState } from "react-native";
 
 import { getMyMembership } from "@/lib/data";
 import type { Membership } from "@/lib/types";
@@ -11,8 +12,13 @@ import { supabase } from "@/supabase/client";
  * across Today, Journal, Profile, Feed, Chat and Stats, because membership
  * only changes when the owner edits it in SQL. `refresh()` re-reads it.
  *
- *   undefined -> still loading
+ *   undefined -> still loading, or the read failed (see `failed`)
  *   null      -> signed in but not in a circle yet (Placeholder states)
+ *
+ * Only an answer is cached. A failed read (dead network at launch, expired
+ * token) stays `undefined` with `failed` set, is retried when the app returns
+ * to the foreground and whenever a screen mounts or calls `refresh()`, and
+ * never shows "not in a circle" to a member who is in one (Phase 2 review).
  */
 const cache = new Map<string, Membership | null>();
 const inflight = new Map<string, Promise<Membership | null>>();
@@ -33,6 +39,8 @@ function load(userId: string, force = false): Promise<Membership | null> {
 
 export function useMembership(): {
   membership: Membership | null | undefined;
+  /** True while the last read failed and no answer is cached. */
+  failed: boolean;
   refresh: () => Promise<Membership | null>;
 } {
   const { user } = useSession();
@@ -40,24 +48,46 @@ export function useMembership(): {
   const [membership, setMembership] = useState<Membership | null | undefined>(() =>
     userId && cache.has(userId) ? (cache.get(userId) ?? null) : undefined,
   );
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
-    load(userId).then((m) => {
-      if (!cancelled) setMembership(m);
+    const run = () =>
+      load(userId).then(
+        (m) => {
+          if (cancelled) return;
+          setMembership(m);
+          setFailed(false);
+        },
+        () => {
+          if (!cancelled) setFailed(true);
+        },
+      );
+    void run();
+    // The OS may have killed the sockets while the app was away; a read
+    // that never landed gets another go on return.
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active" && !cache.has(userId)) void run();
     });
     return () => {
       cancelled = true;
+      sub.remove();
     };
   }, [userId]);
 
   const refresh = useCallback(async () => {
     if (!userId) return null;
-    const m = await load(userId, true);
-    setMembership(m);
-    return m;
+    try {
+      const m = await load(userId, true);
+      setMembership(m);
+      setFailed(false);
+      return m;
+    } catch (e) {
+      setFailed(true);
+      throw e;
+    }
   }, [userId]);
 
-  return { membership, refresh };
+  return { membership, failed, refresh };
 }
