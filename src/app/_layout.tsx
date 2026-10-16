@@ -1,21 +1,63 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
+import {
+  DarkTheme,
+  DefaultTheme,
+  SplashScreen,
+  Stack,
+  ThemeProvider as NavigationThemeProvider,
+} from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useColorScheme } from "react-native";
+import { useEffect } from "react";
+import { StyleSheet } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
-import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useTheme } from "@/hooks/use-theme";
+import { SessionProvider, useSession } from "@/providers/SessionProvider";
+import { ThemeProvider } from "@/providers/ThemeProvider";
+
+// Keep the splash up until the persisted session has been read, so the
+// first frame is the right screen instead of a login flash.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 /**
- * Root layout. The target shape (see docs/HANDOFF.md § Navigation):
- *   (auth)/login, onboarding  - unauthenticated
- *   (tabs)/today|feed|chat|stats|journal - the app, native tabs
- *   settings - pushed modal/stack over the tabs
- * Auth gating lives here once the Supabase session provider exists.
+ * Root layout: providers, then the auth gate.
+ *
+ * Gate (ported from reference/web-pwa/app/page.tsx and (app)/layout.tsx):
+ *   no session            -> (auth)/login
+ *   session, no profile   -> onboarding (name + mode missing)
+ *   session + onboarded   -> (tabs), settings
+ * Stack.Protected redirects as soon as the guard flips (sign-in, sign-out,
+ * onboarding saved), so screens never redirect by hand.
  */
 export default function RootLayout() {
+  return (
+    <GestureHandlerRootView style={styles.root}>
+      <ThemeProvider>
+        <SessionProvider>
+          <SplashController />
+          <RootNavigator />
+        </SessionProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+function SplashController() {
+  const { loading } = useSession();
+  useEffect(() => {
+    if (!loading) SplashScreen.hideAsync().catch(() => {});
+  }, [loading]);
+  return null;
+}
+
+function RootNavigator() {
+  const c = useTheme();
   const scheme = useColorScheme();
-  const c = Colors[scheme === "dark" ? "dark" : "light"];
+  const { loading, session, isOnboarded } = useSession();
+  const signedIn = !!session;
+
   const base = scheme === "dark" ? DarkTheme : DefaultTheme;
-  const theme = {
+  const navTheme = {
     ...base,
     colors: {
       ...base.colors,
@@ -24,12 +66,35 @@ export default function RootLayout() {
       card: c.surface,
       text: c.foreground,
       border: c.border,
+      notification: c.accent,
     },
   };
+
+  // While the session loads nothing is mounted behind the splash; every
+  // guard is false, so the stack has no screen to flash.
   return (
-    <ThemeProvider value={theme}>
-      <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.canvas } }} />
-    </ThemeProvider>
+    <NavigationThemeProvider value={navTheme}>
+      <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: c.canvas },
+        }}
+      >
+        <Stack.Protected guard={!loading && signedIn && isOnboarded}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="settings" options={{ presentation: "card" }} />
+        </Stack.Protected>
+        <Stack.Protected guard={!loading && signedIn && !isOnboarded}>
+          <Stack.Screen name="onboarding" />
+        </Stack.Protected>
+        <Stack.Protected guard={!loading && !signedIn}>
+          <Stack.Screen name="(auth)" />
+        </Stack.Protected>
+      </Stack>
+    </NavigationThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({ root: { flex: 1 } });
