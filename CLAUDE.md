@@ -51,5 +51,16 @@ npx eas-cli@latest build --profile preview --platform android   # APK
 
 ## Git
 
-Commit after each significant feature with an organized message
-(`feat(chat): ...`, `fix(push): ...`). Do not push unless asked.
+Commit like a senior engineer leaving a reviewable trail, not one dump at
+the end. Owner rule, restated 2026-10-16:
+
+- **One concern per commit.** Split by layer or feature (deps, data layer,
+  providers, UI kit, routes, docs), never "wip" or "phase 0". A reviewer
+  should be able to revert any single commit cleanly.
+- **Conventional prefix + scope:** `feat(auth): ...`, `fix(data): ...`,
+  `chore(deps): ...`, `docs(handoff): ...`, `refactor(ui): ...`.
+- **Body says why, not what.** Note the decision behind the change
+  (which doc rule it follows, what alternative was rejected) so the log
+  doubles as a decision record alongside `docs/DECISIONS.md`.
+- Commit at natural checkpoints as you go: after each piece passes
+  `npx tsc --noEmit` and `npx expo lint`. Do not push unless asked.
