@@ -6,6 +6,7 @@ import { AppState, Platform } from "react-native";
 import { useSession } from "@/providers/SessionProvider";
 import {
   logInBackground,
+  notify,
   parseResponse,
   responseKey,
   sheetHref,
@@ -42,6 +43,10 @@ import { registerNotificationTask } from "@/push/task";
  *    because the actions do not open the app and the system wakes or
  *    launches it in the background with the response (categories.ts).
  *    Responses already logged are never replayed into the sheet.
+ *  - a push names its recipient (`data.uid`): a link or log button from a
+ *    push for another account is not followed (a row left behind on a
+ *    shared phone, or a tap while signed out and then someone else signs
+ *    in); the app just opens where it was.
  *  - the launch / sign-in self-heal: re-register this device's token for a
  *    member who turned push on here (the web's syncPushSubscription).
  *
@@ -88,10 +93,13 @@ export function PushController() {
   const navReady = !!useRootNavigationState()?.key;
   const ready = !loading && !!session && isOnboarded && navReady;
 
-  // The href waiting for the gate. Kept in memory only: a kill mid-login
-  // loses it, which is acceptable for a five-person circle (PHASE3.md).
-  const pending = useRef<string | null>(null);
+  // The href waiting for the gate, with the member the push was for (null
+  // for pushes older than the uid stamp). Kept in memory only: a kill
+  // mid-login loses it, which is acceptable for a five-person circle
+  // (PHASE3.md).
+  const pending = useRef<{ href: string; uid: string | null } | null>(null);
   const readyRef = useRef(ready);
+  const userRef = useRef(userId);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Deliver once the gate is open and the navigator exists. `index` has
@@ -103,9 +111,12 @@ export function PushController() {
     if (!pending.current || !readyRef.current || timer.current) return;
     timer.current = setTimeout(() => {
       timer.current = null;
-      const href = pending.current;
+      const next = pending.current;
       pending.current = null;
-      if (!href) return;
+      if (!next) return;
+      // Tapped while signed out, then someone else signed in: not theirs.
+      if (next.uid && next.uid !== userRef.current) return;
+      const { href } = next;
       try {
         router.push(href as Href);
       } catch (e) {
@@ -117,16 +128,19 @@ export function PushController() {
 
   useEffect(() => {
     readyRef.current = ready;
+    userRef.current = userId;
     if (ready) deliver.current();
-  }, [ready]);
+  }, [ready, userId]);
 
   // One place for both delivery paths.
   const onResponse = useRef((response: Notifications.NotificationResponse) => {
     const key = responseKey(response);
     if (handled.has(key)) return;
     handled.add(key);
+    const data = response.notification.request.content.data;
+    const uid = typeof data?.uid === "string" ? data.uid : null;
     const queue = (href: string) => {
-      pending.current = href;
+      pending.current = { href, uid };
       deliver.current();
     };
     const parsed = parseResponse(response);
@@ -146,6 +160,10 @@ export function PushController() {
     }
     if (parsed.kind === "invalidAmount") {
       queue(sheetHref(parsed.type, null, parsed.reminderId));
+      return;
+    }
+    if (parsed.uid && userRef.current && parsed.uid !== userRef.current) {
+      void notify("That reminder was for another account on this phone.", "/today");
       return;
     }
     // Already written headless (a cold start replaying that response).
