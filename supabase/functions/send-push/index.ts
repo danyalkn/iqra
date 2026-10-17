@@ -1,19 +1,39 @@
 // Iqra - send-push Edge Function
-// Sends Web Push (VAPID) to one or more users. Called by the pg_cron jobs
-// (reminders) and the messages @mention trigger via pg_net, authenticated with
-// the project's service-role key. Dead subscriptions (404/410) are pruned.
+// Fans a notification out to one or more users. Called by the pg_cron jobs
+// (reminders, nudges, recap) and the messages trigger via pg_net,
+// authenticated with the project's service-role key.
+//
+// Two kinds of push_subscriptions rows live side by side (docs/PHASE3.md):
+//   web  { endpoint, keys }        -> Web Push with VAPID (the PWA, unchanged)
+//   expo { expo, platform, device } -> Expo push service (the native app)
+// Dead subscriptions are pruned: web 404/410, Expo DeviceNotRegistered.
 //
 // Deploy:  supabase functions deploy send-push
 // Secrets: supabase secrets set VAPID_PUBLIC_KEY=… VAPID_PRIVATE_KEY=… VAPID_SUBJECT=mailto:you@example.com
+//          EXPO_ACCESS_TOKEN=… only if "enhanced push security" is on for the Expo project.
 //          (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY are injected automatically.)
 
 import webpush from "npm:web-push@3.6.7";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 
-type Payload = { title: string; body: string; url?: string; tag?: string };
+type Payload = {
+  title: string;
+  body: string;
+  url?: string;
+  tag?: string;
+  /** Interactive notification category (logReading / logHifz); native only. */
+  category?: string;
+};
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const EXPO_ACCESS_TOKEN = Deno.env.get("EXPO_ACCESS_TOKEN") ?? "";
+
+const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+// Expo accepts up to 100 messages per request.
+const EXPO_BATCH = 100;
+// Must match the channel the app creates (src/push/register.ts).
+const EXPO_CHANNEL = "iqra";
 
 // Rows are user-writable (RLS only constrains who owns the row, not what the
 // endpoint is), so the sender is where we decide what we're willing to POST to.
@@ -40,6 +60,13 @@ function isPushEndpoint(endpoint: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+/** An Expo push token as the app stores it; anything else is not sent to
+ *  Expo (the same "we decide where we POST" rule as the web allowlist). */
+function isExpoToken(token: unknown): token is string {
+  return typeof token === "string" &&
+    /^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]$/.test(token);
 }
 
 /** Run tasks with a concurrency cap so one big batch can't exhaust the isolate
@@ -78,6 +105,80 @@ function isAuthorized(header: string | null): boolean {
   }
 }
 
+type SubRow = {
+  id: string;
+  subscription: { endpoint?: unknown; expo?: unknown };
+};
+type SendError = { host: string; status: number | null; message: string };
+
+type ExpoTicket =
+  | { status: "ok"; id: string }
+  | { status: "error"; message?: string; details?: { error?: string } };
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** One POST to Expo for up to 100 tokens, retried once on 429 / 5xx / a
+ *  network failure. Returns the tickets in message order, or null when the
+ *  request itself failed (already recorded in `errors`). */
+async function postExpo(
+  messages: Record<string, unknown>[],
+  errors: SendError[],
+): Promise<ExpoTicket[] | null> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    "Accept-Encoding": "gzip, deflate",
+  };
+  if (EXPO_ACCESS_TOKEN) headers.Authorization = `Bearer ${EXPO_ACCESS_TOKEN}`;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(EXPO_PUSH_URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(messages),
+      });
+      if (res.status === 429 || res.status >= 500) {
+        if (attempt === 0) {
+          await sleep(1500);
+          continue;
+        }
+        errors.push({
+          host: "exp.host",
+          status: res.status,
+          message: (await res.text()).slice(0, 200),
+        });
+        return null;
+      }
+      const json = await res.json() as {
+        data?: ExpoTicket[];
+        errors?: { code?: string; message?: string }[];
+      };
+      if (!res.ok || !Array.isArray(json.data)) {
+        // Request-level failure (malformed body, bad access token).
+        const first = json.errors?.[0];
+        errors.push({
+          host: "exp.host",
+          status: res.status,
+          message: first ? `${first.code ?? "error"}: ${first.message ?? ""}` : "no tickets",
+        });
+        console.error("send-push Expo request failed", res.status, json.errors);
+        return null;
+      }
+      return json.data;
+    } catch (err) {
+      if (attempt === 0) {
+        await sleep(1500);
+        continue;
+      }
+      errors.push({ host: "exp.host", status: null, message: String(err) });
+      console.error("send-push Expo request threw", err);
+      return null;
+    }
+  }
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
@@ -113,10 +214,29 @@ Deno.serve(async (req) => {
 
   let sent = 0;
   let removed = 0;
-  const errors: { host: string; status: number | null; message: string }[] = [];
+  const errors: SendError[] = [];
 
-  type SubRow = { id: string; subscription: { endpoint?: unknown } };
-  await pooled((subs ?? []) as SubRow[], 20, async (row) => {
+  // Partition: web rows keep the path the PWA has always used; expo rows go
+  // to Expo's service; anything else is logged and skipped.
+  const webRows: SubRow[] = [];
+  const expoRows: { id: string; token: string }[] = [];
+  for (const row of (subs ?? []) as SubRow[]) {
+    if (isExpoToken(row.subscription?.expo)) {
+      expoRows.push({ id: row.id, token: row.subscription.expo });
+    } else if (row.subscription && "endpoint" in row.subscription) {
+      webRows.push(row);
+    } else {
+      errors.push({
+        host: "unrecognised",
+        status: null,
+        message: "Subscription is neither a web endpoint nor an Expo token - skipped.",
+      });
+      console.error("send-push skipped an unrecognised subscription row");
+    }
+  }
+
+  // ── Web Push (unchanged) ───────────────────────────────────────────────
+  await pooled(webRows, 20, async (row) => {
     const endpoint = row.subscription?.endpoint;
     if (!isPushEndpoint(endpoint)) {
       errors.push({
@@ -155,6 +275,58 @@ Deno.serve(async (req) => {
       console.error(`send-push failed (${host}, status ${code}):`, e?.message);
     }
   });
+
+  // ── Expo push (native) ────────────────────────────────────────────────
+  // One message shape for every row; Expo routes to APNs / FCM itself.
+  // `data` is what the app reads on tap (url) and in the foreground handler
+  // (tag); `collapseId` replaces a displayed notification with the same tag
+  // (chat-<group>, reminder), as the PWA's service worker collapsed by tag;
+  // `categoryId` turns a reminder into one with log buttons.
+  const message = (to: string): Record<string, unknown> => ({
+    to,
+    title: payload.title,
+    body: payload.body,
+    data: { url: payload.url ?? "/today", tag: payload.tag ?? null },
+    sound: "default",
+    channelId: EXPO_CHANNEL,
+    priority: "high",
+    ...(payload.tag ? { collapseId: payload.tag } : {}),
+    ...(payload.category ? { categoryId: payload.category } : {}),
+  });
+
+  for (let i = 0; i < expoRows.length; i += EXPO_BATCH) {
+    const batch = expoRows.slice(i, i + EXPO_BATCH);
+    const tickets = await postExpo(batch.map((r) => message(r.token)), errors);
+    if (!tickets) continue;
+    // Tickets come back in message order.
+    for (let j = 0; j < batch.length; j++) {
+      const ticket = tickets[j];
+      if (!ticket) {
+        errors.push({ host: "exp.host", status: null, message: "Missing ticket." });
+        continue;
+      }
+      if (ticket.status === "ok") {
+        sent++;
+        continue;
+      }
+      const code = ticket.details?.error;
+      if (code === "DeviceNotRegistered") {
+        // The app was uninstalled or notifications revoked: the web's 404/410.
+        await supabase.from("push_subscriptions").delete().eq("id", batch[j].id);
+        removed++;
+        continue;
+      }
+      errors.push({
+        host: "exp.host",
+        status: null,
+        message: `${code ?? "error"}: ${ticket.message ?? ""}`,
+      });
+      console.error("send-push Expo ticket error", code, ticket.message);
+    }
+  }
+  // Receipts (/--/api/v2/push/getReceipts, 15 minutes later) are not read:
+  // for a five-person circle the tickets plus DeviceNotRegistered pruning
+  // are enough (docs/PHASE3.md).
 
   return Response.json({ sent, removed, errors });
 });
