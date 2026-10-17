@@ -42,8 +42,14 @@ Three pieces of work, in this order:
   `appleTeamId` after the first submit creates the app record).
 - Git: everything is committed on `main`, nothing pushed (owner rule: do
   not push unless asked). Commit per concern with a body that says why.
-- Metro for the phone runs on port 8082 in the owner's terminal. Dev build
-  with the Phase 3 native modules is installed on the phone.
+- Metro for the phone runs on port 8082 in the owner's terminal
+  (`npx expo start --port 8082`; 8081 is taken by another project). The
+  dev build with the Phase 3 native modules is installed on the phone and
+  loads its JS from that Metro, so every JS change reaches the phone on
+  reload while it runs; if it was stopped, the owner restarts it with
+  `--clear` (a Metro left running across `npx expo install` serves a stale
+  module graph). Use another port for the simulator. The phone must be on
+  the same network as this Mac.
 
 ### Owner tasks still open
 
