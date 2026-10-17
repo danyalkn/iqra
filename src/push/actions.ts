@@ -21,9 +21,9 @@ import { CHANNEL_ID } from "./register";
 
 /**
  * What a notification response asks for, and the one-tap log it performs.
- * Shared by PushController (foreground, both platforms) and the Android
- * background task (src/push/task.ts), so a button means the same thing
- * wherever it is handled.
+ * Shared by PushController (both platforms; it also runs iOS background
+ * taps) and the Android background task (src/push/task.ts), so a button
+ * means the same thing wherever it is handled.
  */
 
 export type ParsedResponse =
@@ -253,5 +253,46 @@ async function performLogClaimed(
     await unclaim(responseId);
     await notify("Couldn’t log that. Tap to finish it in Iqra.", retryHref);
     return "failed";
+  }
+}
+
+/**
+ * A log button tapped with the app not on screen: write it headless and
+ * answer with a local notification. One path for both platforms: the
+ * Android task (src/push/task.ts) and PushController on iOS, where the
+ * actions do not open the app and the system wakes or launches it in the
+ * background with the response instead.
+ *
+ * Every branch ends the interaction: the acted-on notification can stay in
+ * the shade after a background action (with the text field's spinner still
+ * going), so it is dismissed and whatever follows is a fresh local
+ * notification. The last response is cleared so a later launch does not
+ * replay it into the sheet.
+ */
+export async function logInBackground(
+  response: Notifications.NotificationResponse,
+  parsed: Exclude<ParsedResponse, { kind: "open" }>,
+): Promise<void> {
+  const id = response.notification.request.identifier;
+  try {
+    if (parsed.kind === "invalidAmount") {
+      // No app on screen to show the sheet in: say so, and let the tap
+      // finish it there.
+      await notify(
+        "That didn’t look like a page count. Tap to log it in Iqra.",
+        sheetHref(parsed.type, null, parsed.reminderId),
+      );
+      return;
+    }
+    const outcome = await performLog(parsed, responseKey(response));
+    if (outcome === "signedOut") {
+      await notify("Sign in to Iqra to log that.", "/today");
+    } else if (outcome === "wrongUser") {
+      await notify("That reminder was for another account on this phone.", "/today");
+    }
+    // "logged" and "failed" have already notified; "duplicate" is silent.
+  } finally {
+    await Notifications.dismissNotificationAsync(id).catch(() => {});
+    await Notifications.clearLastNotificationResponseAsync().catch(() => {});
   }
 }
