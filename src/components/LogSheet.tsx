@@ -96,6 +96,10 @@ type Props = {
   /** Pages to prefill for a fresh entry (a notification action's amount
    *  arriving through /today?log=<type>&amount=<n>). Ignored when editing. */
   presetAmount?: number | null;
+  /** Juz to prefill for a fresh hifz revision (a row on Today's revision
+   *  card). Overrides only the juz of the carry-on defaults. Ignored when
+   *  editing. */
+  presetJuz?: number | null;
 };
 
 /**
@@ -127,7 +131,7 @@ export function LogSheet(props: Props) {
   }
   // The row's id rather than its identity: a save confirming in the background
   // can swap the edited row for the server's copy without wiping the form.
-  const liveKey = `${generation}:${initialType}:${editing?.id ?? ""}:${mush}:${tz}:${props.presetAmount ?? ""}`;
+  const liveKey = `${generation}:${initialType}:${editing?.id ?? ""}:${mush}:${tz}:${props.presetAmount ?? ""}:${props.presetJuz ?? ""}`;
 
   // Live while open (the web's reset effect re-ran on these while open), but
   // frozen once `open` turns false: Today nulls `editing` in the same call
@@ -167,12 +171,14 @@ function initialForm({
   mush,
   last,
   preset,
+  presetJuz,
 }: {
   editing: LogRow | null | undefined;
   initialType: EntryType;
   mush: MushafId;
   last: LogRow | null | undefined;
   preset: number | null | undefined;
+  presetJuz: number | null | undefined;
 }) {
   const base = {
     notes: editing?.notes ?? "",
@@ -230,6 +236,15 @@ function initialForm({
         d.pages = preset;
       }
     }
+    // A preset juz replaces the carried-on one. The start page and the
+    // rotating half / quarter belong to the last entry's juz, so they only
+    // carry over when that entry was in this juz too (Today passes the
+    // newest entry of the type in the preset juz when it has one).
+    if (presetJuz != null && presetJuz >= 1 && presetJuz <= 30 && presetJuz !== d.juz) {
+      d.juz = presetJuz;
+      d.start = null;
+      d.part = 1;
+    }
     return { ...base, ...d };
   }
   return { ...base, pagesRead: preset != null ? String(preset) : "" };
@@ -246,6 +261,7 @@ function LogForm({
   mush,
   tz,
   presetAmount,
+  presetJuz,
 }: Props & { mush: MushafId }) {
   const c = useTheme();
   const maxPage = totalPages(mush);
@@ -259,7 +275,7 @@ function LogForm({
   // for the server's copy, and re-deriving then would wipe what's being
   // typed. The web kept a ref for the same reason.
   const [init] = useState(() =>
-    initialForm({ editing, initialType, mush, last: lastOfType, preset: presetAmount }),
+    initialForm({ editing, initialType, mush, last: lastOfType, preset: presetAmount, presetJuz }),
   );
 
   // hifz

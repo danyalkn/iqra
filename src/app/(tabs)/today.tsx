@@ -27,6 +27,7 @@ import { DayReminders, type DayRemindersHandle } from "@/components/DayReminders
 import { EmptyState } from "@/components/EmptyState";
 import { EntryRow } from "@/components/EntryRow";
 import { LogSheet } from "@/components/LogSheet";
+import { RevisionCard } from "@/components/RevisionCard";
 import { SpeedDial } from "@/components/SpeedDial";
 import { Card, SegmentedControl, type Segment } from "@/components/ui";
 import { CLOSE_MS as SHEET_CLOSE } from "@/components/ui/Sheet";
@@ -38,7 +39,12 @@ import {
   takeEntriesChanged,
   updateEntry,
 } from "@/data/entryWrites";
-import { fetchMyDayReminders, fetchMyRecentEntries } from "@/data/entryReads";
+import {
+  fetchMyDayReminders,
+  fetchMyHifzHistory,
+  fetchMyRecentEntries,
+  type HifzHistoryRow,
+} from "@/data/entryReads";
 import { useMembership } from "@/hooks/use-membership";
 import { useNow } from "@/hooks/use-now";
 import { useTheme } from "@/hooks/use-theme";
@@ -67,9 +73,21 @@ import {
   totalPages,
   type MushafId,
 } from "@/lib/mushaf";
+import {
+  dueToday,
+  mergeRevisionEntries,
+  revisionPlan,
+  type RevisionItem,
+} from "@/lib/revisionPlan";
 import type { DayReminder, LogRow, NewEntry } from "@/lib/types";
 import { useSession } from "@/providers/SessionProvider";
-import { PREF_KEYS, readPref } from "@/storage/prefs";
+import { useRevisionNudges } from "@/push/useRevisionNudges";
+import {
+  PREF_KEYS,
+  readPref,
+  readRevisionHidden,
+  writeRevisionHidden,
+} from "@/storage/prefs";
 
 type Filter = "all" | "new" | "revision";
 
@@ -192,6 +210,14 @@ export default function TodayScreen() {
   // including on a timezone change), so it is set exactly once.
   const [dayReminders, setDayReminders] = useState<DayReminder[] | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  // The member's whole hifz history for the revision plan (the 120-day
+  // entries would let an old juz drop out), with the instant below which it
+  // is used instead of `entries` (see mergeRevisionEntries). null until a
+  // read has landed; a later failed read keeps the last good one.
+  const [hifzHistory, setHifzHistory] = useState<{
+    rows: HifzHistoryRow[];
+    cutoff: string;
+  } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -215,6 +241,9 @@ export default function TodayScreen() {
   const [pendingLog, setPendingLog] = useState<EntryType | null>(null);
   // Pages the link asked to prefill; the sheet reads it once per open.
   const [sheetPreset, setSheetPreset] = useState<number | null>(null);
+  // The juz a revision-card row asked to prefill (null = the sheet's usual
+  // carry-on juz); read once per open like sheetPreset.
+  const [sheetJuz, setSheetJuz] = useState<number | null>(null);
   if (linkId !== seenLink) {
     setSeenLink(linkId);
     if (openLog && !deepLinkConsumed(openLogKey)) {
@@ -232,6 +261,7 @@ export default function TodayScreen() {
     // initializer required groupId too).
     if (membership) {
       setEditingEntry(null);
+      setSheetJuz(null);
       setSheetType(pendingLog);
       setSheetOpen(true);
     }
@@ -266,11 +296,20 @@ export default function TodayScreen() {
   const loadToday = useCallback((): Promise<void> => {
     if (!groupId || !userId) return Promise.resolve();
     const seq = ++loadSeq.current;
+    // A day inside the 120-day window: newer rows come from `entries`.
+    const cutoff = new Date(Date.now() - 119 * 24 * 60 * 60 * 1000).toISOString();
     return Promise.all([
       fetchMyRecentEntries(groupId, userId),
       fetchMyDayReminders(userId, todayLocal(tz), tomorrowLocal(tz)),
-    ]).then(([recent, reminders]) => {
+      fetchMyHifzHistory(userId),
+    ]).then(([recent, reminders, history]) => {
       if (seq !== loadSeq.current) return;
+      // Its own failure never fails the load: the card falls back to the
+      // window and the nudges stay as scheduled (see `plan` below).
+      if (!history.error && history.rows) {
+        const rows = history.rows;
+        setHifzHistory({ rows, cutoff });
+      }
       if (recent.error || !recent.rows || reminders.error || !reminders.rows) {
         if (loadStateRef.current === "ready") {
           // The list on screen is still good; say so and let the next focus
@@ -287,7 +326,7 @@ export default function TodayScreen() {
       setDayReminders((cur) => cur ?? rows);
       setLoadState("ready");
     });
-  }, [groupId, userId, tz, setEntries, setDayReminders, setLoadState, setError]);
+  }, [groupId, userId, tz, setEntries, setDayReminders, setLoadState, setError, setHifzHistory]);
 
   useEffect(() => {
     void loadToday();
@@ -379,18 +418,67 @@ export default function TodayScreen() {
   }, [entries]);
   // The newest entry of the type being logged: a fresh hifz entry carries on
   // from it (sabak continues right after the last one).
+  // Opened from a revision-card row, it is the newest of the type in that
+  // juz, so the portion and start page carry on within the juz being
+  // revised (none there: the sheet starts the juz fresh, see presetJuz).
   const lastOfType = useMemo(() => {
     let best: LogRow | null = null;
     for (const x of entries) {
       if (x.entry_type !== sheetType) continue;
+      if (sheetJuz != null && x.juz !== sheetJuz) continue;
       if (!best || new Date(x.logged_at) > new Date(best.logged_at)) best = x;
     }
     return best;
-  }, [entries, sheetType]);
+  }, [entries, sheetType, sheetJuz]);
   const lastMushaf = lastReading?.mushaf ?? DEFAULT_MUSHAF;
   const lastPage = lastReading ? pageFromRef(lastReading.to_ref) : null;
   const finished = lastPage != null && lastPage >= totalPages(lastMushaf);
   const startPage = lastPage == null ? null : finished ? 1 : lastPage + 1;
+
+  // Revision plan (hifz; docs/DECISIONS.md "Revision plan"): the whole hifz
+  // history, with the live entries on top so a log, edit or delete counts at
+  // once. Without the history (its read failed) the card still works from
+  // the 120-day window, where a juz untouched that long would drop out, so
+  // the nudges are then left as scheduled instead of rebuilt from it.
+  const plan = useMemo(() => {
+    if (mode !== "hifz") return [];
+    const input = hifzHistory
+      ? mergeRevisionEntries(entries, hifzHistory.rows, hifzHistory.cutoff)
+      : entries;
+    return revisionPlan(input, tz, today);
+  }, [mode, entries, hifzHistory, tz, today]);
+  // Rows hidden for today, per member and local date; null until the pref
+  // has been read for this member and day, so a hidden row never flashes
+  // back and the nudges never schedule it for tonight.
+  const [hidden, setHidden] = useState<{ userId: string; date: string; juz: number[] } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!userId) return;
+    let active = true;
+    readRevisionHidden(userId, today).then((juz) => {
+      if (active) setHidden({ userId, date: today, juz });
+    });
+    return () => {
+      active = false;
+    };
+  }, [userId, today]);
+  const hiddenToday =
+    hidden && hidden.userId === userId && hidden.date === today ? hidden.juz : null;
+  const revisionRows = hiddenToday
+    ? dueToday(plan).filter((i) => !hiddenToday.includes(i.juz))
+    : [];
+
+  // The evening nudges follow the same plan. Not before the first fetch has
+  // landed (an empty list then would cancel tonight's nudge for nothing), and
+  // not from the window alone (it can miss an old juz).
+  useRevisionNudges({
+    userId,
+    hifz: mode === "hifz",
+    plan: profile && loadState === "ready" && (mode !== "hifz" || hifzHistory) ? plan : null,
+    today,
+    hiddenToday,
+  });
 
   const dateLabel = new Date(now).toLocaleDateString("en-GB", {
     timeZone: tz,
@@ -404,6 +492,7 @@ export default function TodayScreen() {
   const handlePick = (t: EntryType) => {
     setEditingEntry(null);
     setSheetPreset(null);
+    setSheetJuz(null);
     setSheetType(t);
     setSheetOpen(true);
   };
@@ -411,8 +500,25 @@ export default function TodayScreen() {
   const handleEdit = (entry: LogRow) => {
     setEditingEntry(entry);
     setSheetPreset(null);
+    setSheetJuz(null);
     setSheetType(entry.entry_type);
     setSheetOpen(true);
+  };
+
+  // A revision-card row: that row's type, with its juz preselected.
+  const handleRevise = (item: RevisionItem) => {
+    setEditingEntry(null);
+    setSheetPreset(null);
+    setSheetJuz(item.juz);
+    setSheetType(item.type);
+    setSheetOpen(true);
+  };
+
+  const handleHideRevision = (juz: number) => {
+    if (!userId || !hiddenToday) return;
+    const next = [...hiddenToday, juz];
+    setHidden({ userId, date: today, juz: next });
+    void writeRevisionHidden(userId, today, next);
   };
 
   const closeSheet = () => {
@@ -629,6 +735,18 @@ export default function TodayScreen() {
               </View>
             )}
 
+            {/* What to revise today (hifz only). Hidden or revised rows drop
+                out; nothing due means no card at all. */}
+            {!loadFailed && groupId && mode === "hifz" && revisionRows.length > 0 && (
+              <View style={styles.revisionWrap}>
+                <RevisionCard
+                  items={revisionRows}
+                  onOpen={handleRevise}
+                  onHide={handleHideRevision}
+                />
+              </View>
+            )}
+
             {/* Filter (hifz only - readers have a single category) */}
             {mode !== "reading" && todayEntries.length > 0 && (
               <View style={styles.filterWrap}>
@@ -733,6 +851,7 @@ export default function TodayScreen() {
         mushaf={mushaf}
         tz={tz}
         presetAmount={editingEntry ? null : sheetPreset}
+        presetJuz={editingEntry ? null : sheetJuz}
       />
 
       <Celebration trigger={celebrateTick} />
@@ -772,6 +891,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   bookmarkText: { flex: 1 },
+  revisionWrap: { paddingHorizontal: 20, paddingTop: 12 },
   filterWrap: { paddingHorizontal: 20, paddingTop: 20 },
   banner: {
     marginHorizontal: 20,
