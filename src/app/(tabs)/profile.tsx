@@ -91,14 +91,17 @@ export default function ProfileScreen() {
     const userId = user?.id;
     if (userId) {
       await withTimeout(syncOutbox(userId), 5000);
-      const left = (await loadOutbox(userId)).length;
+      const items = (await loadOutbox(userId)).filter((i) => !i.discard);
+      const left = items.length;
       if (left > 0) {
         const one = left === 1;
+        // Refused entries will not sync by waiting; only say so for the rest.
+        const canWait = items.some((i) => i.state === "pending");
         Alert.alert(
           one ? "1 entry hasn’t synced yet" : `${left} entries haven’t synced yet`,
-          `Signing out now discards ${one ? "it" : "them"} from this phone. Stay signed in and ${
-            one ? "it syncs" : "they sync"
-          } when you’re back online.`,
+          `Signing out now discards ${one ? "it" : "them"} from this phone.${
+            canWait ? " Stay signed in and Iqra sends what it can when you’re back online." : ""
+          }`,
           [
             { text: "Stay signed in", style: "cancel", onPress: () => setSigningOut(false) },
             { text: "Discard and sign out", style: "destructive", onPress: () => void signOut() },

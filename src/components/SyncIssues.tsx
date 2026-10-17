@@ -53,7 +53,7 @@ export function SyncIssues({
               {" · "}
               {closed
                 ? "Yesterday closed at 3 AM, so it can’t be saved there anymore."
-                : (item.message ?? "The server didn’t accept it.")}
+                : "Iqra couldn’t save it. Try again, or discard it if it’s a mistake."}
             </Text>
             <View style={styles.actions}>
               {closed ? (
