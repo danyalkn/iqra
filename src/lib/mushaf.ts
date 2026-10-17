@@ -147,15 +147,19 @@ export const SURAHS: Surah[] = [
 ];
 
 /** Which mushaf an entry was logged in / a user reads. */
-export type MushafId = "uthmani15" | "indopak13";
+export type MushafId = "uthmani15" | "indopak13" | "indopak16";
 export const DEFAULT_MUSHAF: MushafId = "uthmani15";
 
-// The 13-line Indo-Pak isn't standardized across publishers, so rather than
+// The Indo-Pak prints aren't standardized across publishers, so rather than
 // invent per-surah page numbers we PROJECT the content-fixed 15-line positions
-// onto the 13-line's page count: every surah/juz begins at the same fraction of
+// onto each print's page count: every surah/juz begins at the same fraction of
 // the way through the Qur'an in any mushaf. Accurate to within a few pages;
-// recalibrate INDOPAK13_TOTAL to a specific print to tighten it.
+// recalibrate a TOTAL to a specific print to tighten it. The database's
+// pages_equiv scales page amounts by 604 / the same totals (migration
+// 20261017120000_mushaf_pages_equiv.sql): change both together.
 const INDOPAK13_TOTAL = 849;
+/** 16-line Indo-Pak, 553 pages (added 2026-10-17 for a member's cousin). */
+const INDOPAK16_TOTAL = 553;
 function project(madaniPage: number, total: number): number {
   const f = (madaniPage - 1) / (MADANI_TOTAL - 1);
   return Math.min(total, Math.max(1, Math.round(1 + f * (total - 1))));
@@ -181,6 +185,12 @@ const SPECS: Record<MushafId, MushafSpec> = {
     juzStart: MADANI_JUZ_STARTS.map((p) => project(p, INDOPAK13_TOTAL)),
     surahStart: SURAHS.map((s) => project(s.page, INDOPAK13_TOTAL)),
   },
+  indopak16: {
+    id: "indopak16",
+    totalPages: INDOPAK16_TOTAL,
+    juzStart: MADANI_JUZ_STARTS.map((p) => project(p, INDOPAK16_TOTAL)),
+    surahStart: SURAHS.map((s) => project(s.page, INDOPAK16_TOTAL)),
+  },
 };
 
 function spec(m: MushafId | null | undefined): MushafSpec {
@@ -191,6 +201,7 @@ function spec(m: MushafId | null | undefined): MushafSpec {
 export const MUSHAF_OPTIONS: { id: MushafId; label: string; sub: string }[] = [
   { id: "uthmani15", label: "15-line Uthmani", sub: "Madani · 604 pages" },
   { id: "indopak13", label: "13-line Indo-Pak", sub: `~${INDOPAK13_TOTAL} pages` },
+  { id: "indopak16", label: "16-line Indo-Pak", sub: `~${INDOPAK16_TOTAL} pages` },
 ];
 
 /** Total page count of a mushaf. */

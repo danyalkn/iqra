@@ -72,7 +72,8 @@ export function MushafSelect() {
         })}
       </View>
       <Text style={[Type.caption, styles.helper, { color: c.faint }]}>
-        Sets how your reading page maps to juz & surah. Pages count the same either way.
+        Sets how your reading page maps to juz & surah. Circle totals convert your pages to the
+        standard 604-page mushaf.
       </Text>
     </Card>
   );
