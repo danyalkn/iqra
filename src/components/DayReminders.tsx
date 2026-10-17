@@ -53,10 +53,6 @@ async function getPushState(userId: string): Promise<"on" | "off"> {
   return (await getPushStateFor(userId)) === "on" ? "on" : "off";
 }
 
-// Push state is stable for a session except the "off" answer, which a
-// cold-start race can return before the token is registered. Cache
-// everything else.
-let cachedPush: "on" | null = null;
 
 /**
  * One-time reminders for later today (or tomorrow), shown at the top of the
@@ -96,7 +92,11 @@ export function DayReminders({
   // defaults, while a closing sheet keeps its instance for the exit slide.
   const [sheetKey, setSheetKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [push, setPush] = useState<PushKnown>(() => cachedPush ?? "loading");
+  // Re-read on mount, on sheet open and on foreground return: the Settings
+  // switch, the OS permission and the signed-in member can all change under
+  // a resident Today tab, so nothing here is cached (the web cached its
+  // service-worker answer; the native check is local prefs and fast).
+  const [push, setPush] = useState<PushKnown>("loading");
   // Ids mid-delete: a refetch that lands after the optimistic removal must
   // not bring the row back. The mutation counter covers the other order: a
   // refetch that STARTED before a delete or add and lands after it is stale.
@@ -110,21 +110,17 @@ export function DayReminders({
 
   const checkPush = useCallback(() => {
     getPushState(userId)
-      .then((s) => {
-        if (s !== "off") cachedPush = s;
-        setPush(s);
-      })
+      .then(setPush)
       .catch(() => setPush("off"));
   }, [userId]);
   // Resolve push state at mount, well before the sheet opens, so the
   // warning is known up front instead of shifting the layout under a thumb.
   useEffect(() => {
-    if (!cachedPush) checkPush();
+    checkPush();
   }, [checkPush]);
 
   const openSheet = useCallback(() => {
-    // A cold-start "off" may have been the race; look again before warning.
-    if (!cachedPush) checkPush();
+    checkPush();
     setSheetKey((k) => k + 1);
     setSheetOpen(true);
   }, [checkPush]);
@@ -189,13 +185,16 @@ export function DayReminders({
     };
     arm();
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") tick(true);
+      if (state === "active") {
+        tick(true);
+        checkPush();
+      }
     });
     return () => {
       clearTimeout(timer);
       sub.remove();
     };
-  }, [refetch, tz]);
+  }, [refetch, tz, checkPush]);
 
   const remove = async (id: string) => {
     const prev = reminders;

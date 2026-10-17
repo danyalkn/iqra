@@ -95,11 +95,14 @@ async function fetchToken(): Promise<string | null> {
 /** Delete this user's row for one token. Best-effort; RLS scopes it to the
  *  caller, so it is a no-op once signed out (hence sign-out calls it first). */
 async function deleteRow(userId: string, token: string): Promise<void> {
-  await supabase
+  const { error } = await supabase
     .from("push_subscriptions")
     .delete()
     .eq("user_id", userId)
     .eq("subscription->>expo", token);
+  // supabase-js returns errors, it does not throw; a failed delete must
+  // not read as success (the row would outlive the sign-out).
+  if (error) throw error;
 }
 
 /** Insert the row for `token` unless this user already has one (dedupe by
@@ -199,15 +202,20 @@ export async function unregisterPush(
   { keepFlag = false }: { keepFlag?: boolean } = {},
 ): Promise<PushState> {
   const token = await readPref(PREF_KEYS.pushToken);
+  let deleted = true;
   if (token) {
     try {
       await deleteRow(userId, token);
     } catch (e) {
+      // Keep the token pref so the next toggle-on or sign-in (token rotation
+      // check) tries the delete again; the enabled flag still clears so the
+      // switch reads "off" as asked.
+      deleted = false;
       console.warn("Push row delete failed", e);
     }
   }
   await Promise.all([
-    writePref(PREF_KEYS.pushToken, null),
+    deleted ? writePref(PREF_KEYS.pushToken, null) : Promise.resolve(),
     keepFlag ? Promise.resolve() : writePref(pushEnabledKey(userId), null),
   ]);
   return "off";
