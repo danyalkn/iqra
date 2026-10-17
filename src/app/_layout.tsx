@@ -15,6 +15,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 import { SessionProvider, useSession } from "@/providers/SessionProvider";
 import { ThemeProvider } from "@/providers/ThemeProvider";
+import { PushController } from "@/push/PushController";
 
 // Keep the splash up until the persisted session has been read, so the
 // first frame is the right screen instead of a login flash.
@@ -44,6 +45,9 @@ export default function RootLayout() {
         <ThemeProvider>
           <SessionProvider>
             <SplashController />
+            {/* Push: foreground handler, tap routing through the gate,
+                token self-heal. Needs useSession, so it sits here. */}
+            <PushController />
             <RootNavigator />
           </SessionProvider>
         </ThemeProvider>
