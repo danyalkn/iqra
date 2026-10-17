@@ -12,7 +12,7 @@ import { ENTRY_META, isReadingType, TYPES_BY_MODE, type EntryType } from "@/lib/
 import { continuedEntry, parseLogAmount } from "@/lib/entryDefaults";
 import { DEFAULT_MUSHAF } from "@/lib/mushaf";
 import { pagesPhrase } from "@/lib/position";
-import type { NewEntry } from "@/lib/types";
+import type { LogRow, NewEntry } from "@/lib/types";
 import { PREF_KEYS, readPref, writePref } from "@/storage/prefs";
 import { supabase } from "@/supabase/client";
 
@@ -186,11 +186,12 @@ function describe(entry: NewEntry): string {
 export async function performLog(
   action: { type: EntryType; amount: number | null; reminderId: string | null; uid: string | null },
   responseKey: string,
+  tappedAt: string,
 ): Promise<LogOutcome> {
   if (inFlight.has(responseKey)) return "duplicate";
   inFlight.add(responseKey);
   try {
-    return await performLogClaimed(action, responseKey);
+    return await performLogClaimed(action, responseKey, tappedAt);
   } finally {
     inFlight.delete(responseKey);
   }
@@ -199,6 +200,7 @@ export async function performLog(
 async function performLogClaimed(
   action: { type: EntryType; amount: number | null; reminderId: string | null; uid: string | null },
   responseId: string,
+  tappedAt: string,
 ): Promise<LogOutcome> {
   if (!(await claim(responseId))) return "duplicate";
   const retryHref = sheetHref(action.type, action.amount, action.reminderId);
@@ -234,9 +236,25 @@ async function performLogClaimed(
       userId,
     );
     if (readError || !recent) throw new Error("recent entries unavailable");
-    const entry = continuedEntry(action.type, recent, mush, action.amount);
-    const { row, error } = await insertEntry(userId, membership.group_id, entry);
-    if (error || !row) throw new Error(error ?? "insert failed");
+    // Dated at the tap, not when the request lands: iOS can suspend a
+    // background launch mid-write and resume it hours later.
+    const entry = { ...continuedEntry(action.type, recent, mush, action.amount), logged_at: tappedAt };
+    let { row, error } = await insertEntry(userId, membership.group_id, entry);
+    if (error || !row) {
+      // The insert may have committed with the reply lost (suspended
+      // mid-request). The tap time is to the millisecond, so a row with it
+      // is this one; reporting "couldn't log" would invite a second entry.
+      const { data: landed } = await supabase
+        .from("log_entries")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("entry_type", entry.entry_type)
+        .eq("logged_at", tappedAt)
+        .maybeSingle();
+      if (!landed) throw new Error(error ?? "insert failed");
+      row = landed as LogRow;
+      error = null;
+    }
     markEntriesChanged();
 
     const tz = profile.timezone || "UTC";
@@ -273,6 +291,7 @@ export async function logInBackground(
   response: Notifications.NotificationResponse,
   parsed: Exclude<ParsedResponse, { kind: "open" }>,
 ): Promise<void> {
+  const tappedAt = new Date().toISOString();
   const id = response.notification.request.identifier;
   try {
     if (parsed.kind === "invalidAmount") {
@@ -284,7 +303,7 @@ export async function logInBackground(
       );
       return;
     }
-    const outcome = await performLog(parsed, responseKey(response));
+    const outcome = await performLog(parsed, responseKey(response), tappedAt);
     if (outcome === "signedOut") {
       await notify("Sign in to Iqra to log that.", "/today");
     } else if (outcome === "wrongUser") {
