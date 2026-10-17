@@ -65,8 +65,9 @@ function isPushEndpoint(endpoint: unknown): boolean {
 /** An Expo push token as the app stores it; anything else is not sent to
  *  Expo (the same "we decide where we POST" rule as the web allowlist). */
 function isExpoToken(token: unknown): token is string {
-  return typeof token === "string" &&
-    /^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]$/.test(token);
+  // The docs show only the shape; the inner alphabet is not specified, so
+  // only the frame is checked.
+  return typeof token === "string" && /^Expo(nent)?PushToken\[[^\]\s]+\]$/.test(token);
 }
 
 /** Run tasks with a concurrency cap so one big batch can't exhaust the isolate
@@ -127,7 +128,6 @@ async function postExpo(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
-    "Accept-Encoding": "gzip, deflate",
   };
   if (EXPO_ACCESS_TOKEN) headers.Authorization = `Bearer ${EXPO_ACCESS_TOKEN}`;
 
@@ -137,6 +137,8 @@ async function postExpo(
         method: "POST",
         headers,
         body: JSON.stringify(messages),
+        // A hung request must not stall the web results already collected.
+        signal: AbortSignal.timeout(10_000),
       });
       if (res.status === 429 || res.status >= 500) {
         if (attempt === 0) {
@@ -279,18 +281,19 @@ Deno.serve(async (req) => {
   // ── Expo push (native) ────────────────────────────────────────────────
   // One message shape for every row; Expo routes to APNs / FCM itself.
   // `data` is what the app reads on tap (url) and in the foreground handler
-  // (tag); `collapseId` replaces a displayed notification with the same tag
-  // (chat-<group>, reminder), as the PWA's service worker collapsed by tag;
-  // `categoryId` turns a reminder into one with log buttons.
+  // (tag). Same-tag replacement, as the PWA's service worker did: on iOS
+  // `collapseId` replaces a displayed notification, on Android `tag` does
+  // (there `collapseId` only coalesces in transit). `categoryId` turns a
+  // reminder into one with log buttons. Whole message capped at 4 KiB.
   const message = (to: string): Record<string, unknown> => ({
     to,
     title: payload.title,
     body: payload.body,
-    data: { url: payload.url ?? "/today", tag: payload.tag ?? null },
+    data: { url: payload.url ?? "/today", ...(payload.tag ? { tag: payload.tag } : {}) },
     sound: "default",
     channelId: EXPO_CHANNEL,
     priority: "high",
-    ...(payload.tag ? { collapseId: payload.tag } : {}),
+    ...(payload.tag ? { collapseId: payload.tag, tag: payload.tag } : {}),
     ...(payload.category ? { categoryId: payload.category } : {}),
   });
 
@@ -324,9 +327,12 @@ Deno.serve(async (req) => {
       console.error("send-push Expo ticket error", code, ticket.message);
     }
   }
-  // Receipts (/--/api/v2/push/getReceipts, 15 minutes later) are not read:
-  // for a five-person circle the tickets plus DeviceNotRegistered pruning
-  // are enough (docs/PHASE3.md).
+  // `sent` for Expo rows means "accepted by Expo", not delivered: credential
+  // problems (InvalidCredentials, MismatchSenderId), MessageTooBig and rate
+  // limits surface only in receipts (/--/api/v2/push/getReceipts, about 15
+  // minutes later, kept 24 h), which are not read: for a five-person circle
+  // the tickets plus DeviceNotRegistered pruning are enough (docs/PHASE3.md).
+  // If a platform "just gets nothing", poll the receipts for a ticket id.
 
   return Response.json({ sent, removed, errors });
 });
