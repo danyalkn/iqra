@@ -149,10 +149,25 @@ never the real circle).
 
 ### Offline logging: what was built (2026-10-17)
 
-Code complete in commits 8c1a568..7cf9395, reviewed (Opus, 2 high and 5
-medium findings, all fixed in the `fix(...)` commits after 6db970d),
-migration 20261017180000 applied and recorded. Decisions taken while
-building, refining the plan above:
+Code complete in commits 8c1a568..4a56f82, reviewed twice (Opus: 2 high
+and 5 medium findings, then 5 smaller ones on the fixes; all fixed in the
+`fix(...)` commits after 6db970d), migration 20261017180000 applied and
+recorded. Shipped 2026-10-17 by EAS Update (iOS production group
+4e807b4b, Android preview group 2ca0201d).
+
+Simulator-verified 2026-10-17 with a throwaway account in the demo circle
+(deleted afterwards, zero rows left): online log, continuation, edit and
+delete through the outbox; then "offline" by serving the bundle with
+`EXPO_PUBLIC_SUPABASE_URL=https://offline-test.invalid` (requests fail as
+with no connection, the keychain session stays): the app opened on saved
+data with "Offline, showing saved data.", a Sabak continued from the saved
+rows and showed "Waiting to sync", an edit of it stayed local, and after a
+kill and a relaunch against the real URL the entry landed exactly once
+with `offline_logged_at` set and the edit applied. Sign-out cleared the
+outbox and saved-copy keys. Not covered there (needs the phone): real
+airplane mode, an access token older than an hour, notification buttons.
+
+Decisions taken while building, refining the plan above:
 
 - **3 AM window: owner chose a grace by offline time**, not the strict
   rule. `log_entries.offline_logged_at` is sent only once a first send has
@@ -198,6 +213,18 @@ building, refining the plan above:
   the outbox and every saved copy. A user change (e.g. a dead refresh
   token) clears the saved copies but keeps that member's outbox for when
   they sign back in.
+- Accepted gaps from the second review: a button still writes its
+  dedupe claim before its (at most 1.5 s, saved copies present) look at
+  the network, so an iOS suspension in exactly that window loses the tap
+  silently; queueing from saved copies before any network call would close
+  it if the phone test shows losses. On a cold start slower than 4 s a
+  deep link opens on the saved copy. A timed-out sign-out whose supabase-js
+  call finishes after a different member signs in could revoke that
+  member's session (needs a sign-in within seconds; not handled).
+- Observation, not changed: iOS's own HTTP cache (`Library/Caches/
+  .../fsCachedData`) keeps copies of Supabase responses after sign-out.
+  Pre-existing; the app never writes it. A `cache: "no-store"` on the
+  guarded fetch would stop it if the owner wants that.
 - Accepted gaps: a button's "continue from" uses the rows this phone knows
   (the saved copy follows every change here, but a log from another device
   since the last read is missed); a revoked session leaves its outbox on
