@@ -46,6 +46,19 @@ When the code and this file disagree, this file wins; ask the owner.
   Enforced by trigger `log_entries_backdate_guard` (auth.uid() null = owner
   or SQL editor bypass) and mirrored in the log sheet UI.
 - Edits never change `logged_at`.
+- **Offline logging (owner, 2026-10-17).** The native app logs with no
+  connection: every new entry is queued on the phone with a client-made id
+  and sent when back online, exactly once (a retry hits the primary key).
+  An entry whose first send failed carries `log_entries.offline_logged_at`
+  (device time it was saved) and the 3 AM guard judges it by that time,
+  not by when it arrived: "go according to when it was logged offline".
+  The time is the phone's clock, so it only counts when plausible (not in
+  the future, at most 7 days old, not before the entry's `logged_at`);
+  otherwise the normal rule applies. The column also marks which entries
+  were logged offline. Edits and deletes of entries already on the server
+  still need a connection; a waiting entry can be edited or discarded on
+  the phone. Signing out with entries waiting asks first and discards
+  them; they never sync into another account.
 
 ## Reminders
 
