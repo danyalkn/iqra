@@ -530,6 +530,15 @@ once Apple approves the entitlement; do not block Phase 3 on it.
   that the bundle is wrong. A Metro left running across `npx expo install`
   serves a stale module graph (red box "requireOptionalNativeModule of
   null"): restart it with `--clear`.
+- Phase 3 notes (2026-10-16): push code lives in `src/push/` (imports
+  react-native, so never in `src/lib`). The notification handler and the
+  category registration run at module scope of `PushController.tsx`; the
+  Android background task is defined in `src/push/task.ts` and imported
+  first from the custom `index.js` entry. Shared lib addition to mirror to
+  the web repo: `src/lib/entryDefaults.ts` (fresh-entry defaults and row
+  constructors extracted from LogSheet; pure). Today accepts
+  `/today?log=<type>&amount=<n>` to prefill the pages. Everything else is in
+  `docs/PHASE3.md` "Progress and decisions made while building".
 - Ultracode: good for Phase 1 and 2 (independent screens). Not for Phase 0,
   3, or 4, which need one consistent thread of decisions.
 - Model guidance from the owner (revised 2026-10-16): the main session runs
@@ -547,6 +556,6 @@ once Apple approves the entitlement; do not block Phase 3 on it.
 | 0 Foundation | done | Built, typechecked, linted and verified on the owner's iPhone via an EAS dev build (2026-10-16). Login was ported early; onboarding is a stub. App Store Connect app record still needed before Phase 3 `eas submit`. |
 | 1 Core screens | code complete | All five screens, the shared log kit and the chart decision landed 2026-10-16 (typecheck, lint, expo-doctor clean; adversarial review pass applied). Needs a dev-client rebuild (expo-haptics, Skia) and the device checklist in the working notes. Stubs by design: NotificationsToggle and DeleteAccount wait for Phase 3. |
 | 2 Social + stats | code complete, simulator-verified | Feed, Chat and Insights ported 2026-10-16 (typecheck, lint clean; adversarial review applied; iOS 26.5 simulator walkthrough passed after eleven device fixes). EAS dev build with the new native modules is built (2026-10-16); owner phone check still open for haptics, the 3 AM window and live multi-device traffic. |
-| 3 Push + TestFlight | not started | Handoff written: `docs/PHASE3.md` (plan, owner tasks, decisions, kickoff brief). Owner tasks 1 to 3 there are the long poles (App Store Connect record, privacy policy URL + test account, pasting the migration and deploying the two functions). |
+| 3 Push + TestFlight | code complete (steps 1 to 5) | 2026-10-16: expo-notifications + task manager, `src/push/` (register, PushController, categories, actions, Android task), Settings toggle and DayReminders off their stubs, sign-out cleanup, shared `entryDefaults`, send-push Expo branch, Phase 3 migration, delete-account function. Decisions in `docs/PHASE3.md` "Progress and decisions". Needs: dev-client rebuild, owner pastes the migration and deploys both functions, device checklist, then the version bump and ship steps. |
 | 4 Screen Time | not started | Entitlement requests: NOT YET FILED (owner task 3) |
 | 5 Retire PWA | not started | |

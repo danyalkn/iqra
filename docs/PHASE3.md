@@ -241,6 +241,49 @@ reminders, day_reminders, reactions, chat_reads). The client
 (`src/data/account.ts`) already invokes it and maps `{ error }`; after the
 function is deployed delete the `NOT_AVAILABLE` copy path.
 
+## Progress and decisions made while building (2026-10-16)
+
+Steps 1 to 5 of the order of work are code complete, typechecked and
+linted (commits 116220a..c2287ab). Decisions taken by the Phase 3 session
+that refine the plan above:
+
+- **Sign-out keeps the per-user enabled flag.** The device row is deleted
+  before `auth.signOut` (RLS), but `iqra:push-enabled:<userId>` stays, so
+  signing back in re-registers silently; the member asked to leave, not to
+  stop notifications. The Settings switch clears the flag.
+- **Simulators report `unsupported`** (Expo cannot deliver remote pushes to
+  them) and the toggle says so. Local notifications still work there for
+  testing the categories.
+- **Foreground pushes keep their sound** (`shouldPlaySound: !suppress`)
+  because Android drops the heads-up alert without it; iOS gets the same
+  for consistency.
+- **Categories follow the reminder's entry type first**, then the mode: a
+  hifz member's "Reading" reminder shows the reading buttons
+  (`push_category(mode, entry_type)` in the migration).
+- **The streak-grace nudge carries no category**: it asks for yesterday's
+  entry and a one-tap action logs now. It opens Today, where the Yesterday
+  control is live until 3 AM.
+- **Foreground action taps open the prefilled sheet on both platforms**;
+  only Android with the app in the background (or killed) writes headless
+  through the task. Response ids already written are kept in the
+  `iqra:push-logged` pref (capped) so the task, the listener and the
+  cold-start hook never log one tap twice.
+- **No retry queue** for a failed headless write: the failure is a local
+  notification whose tap opens the sheet prefilled (five people).
+- **"Other amount" accepts 0 < n <= 100** with up to two decimals (the
+  sheet's own rule), not the 1 to 604 range sketched above.
+- **Shared lib addition**: `src/lib/entryDefaults.ts` (pure) now owns the
+  fresh-entry defaults and the row constructors LogSheet used inline, so
+  the notification actions save exactly what the sheet would. Native-first;
+  the web keeps the rules inline until it adopts the file.
+- **Custom entry** `index.js` imports `src/push/task` before
+  `expo-router/entry` (the docs require the task at module scope in an
+  early module). `package.json` main points at it.
+
+Still open: device testing (checklist below), the version bump and the
+ship steps, deleting the `NOT_AVAILABLE` copy path in `src/data/account.ts`
+once `delete-account` is deployed.
+
 ## Ship: first TestFlight and the Android APK
 
 1. Bump `expo.version` to the store version (owner decision, 1.0.0) in the
