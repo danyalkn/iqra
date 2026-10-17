@@ -539,6 +539,10 @@ once Apple approves the entitlement; do not block Phase 3 on it.
   constructors extracted from LogSheet; pure). Today accepts
   `/today?log=<type>&amount=<n>` to prefill the pages. Everything else is in
   `docs/PHASE3.md` "Progress and decisions made while building".
+- Revision plan (2026-10-17): `src/lib/revisionPlan.ts` is a native-only
+  shared-lib addition (pure; the web has no revision plan, nothing to
+  mirror); it feeds Today's "Revise today" card and the local 20:00 nudges
+  in `src/push/revisionNudge.ts`.
 - Ultracode: good for Phase 1 and 2 (independent screens). Not for Phase 0,
   3, or 4, which need one consistent thread of decisions.
 - Model guidance from the owner (revised 2026-10-16): the main session runs
