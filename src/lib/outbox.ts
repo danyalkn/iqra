@@ -40,8 +40,13 @@ export type OutboxItem = {
   attempts: number;
   state: OutboxState;
   reason?: RejectReason;
-  /** The server's words for a refusal, kept for the "Couldn't sync" row. */
+  /** The server's words for a refusal (kept for debugging; members see a
+   *  plain sentence instead). */
   message?: string;
+  /** Discarded by the member after a send had already failed: that send
+   *  may have landed with its reply lost, so the queue still owes the
+   *  server a delete of this id. Hidden everywhere meanwhile. */
+  discard?: boolean;
 };
 
 /** A queued entry as a log row, for lists, the streak and "continue from". */
@@ -69,20 +74,30 @@ export function outboxRow(item: OutboxItem): LogRow {
  * The server's rows with the entries still waiting to send, newest first.
  * Rejected entries are left out: they never landed, so they must not carry
  * a streak or a bookmark. A queued id the server already has (sent, but the
- * queue not yet cleared) shows once, as the server's copy.
+ * queue not yet cleared) shows once, as the server's copy, unless the queue
+ * holds the member's edit of it (waiting entries are editable). A discarded
+ * id is hidden even when the server still has it.
  */
 export function withPending(server: LogRow[], items: OutboxItem[]): LogRow[] {
   const pending = items.filter((i) => i.state === "pending");
   if (pending.length === 0) return server;
-  const have = new Set(server.map((r) => r.id));
-  const extra = pending.filter((i) => !have.has(i.id)).map(outboxRow);
-  if (extra.length === 0) return server;
-  return [...extra, ...server].sort(
+  const gone = new Set(pending.filter((i) => i.discard).map((i) => i.id));
+  const shown = pending.filter((i) => !i.discard);
+  const mine = new Set(shown.map((i) => i.id));
+  const base = server.filter((r) => !gone.has(r.id) && !mine.has(r.id));
+  if (base.length === server.length && shown.length === 0) return server;
+  return [...shown.map(outboxRow), ...base].sort(
     (a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime(),
   );
 }
 
-/** Oldest first: the order the member logged them in. */
+/** Entries still owed to the server and shown as waiting (not discards). */
+export function waitingItems(items: OutboxItem[]): OutboxItem[] {
+  return items.filter((i) => i.state === "pending" && !i.discard);
+}
+
+/** Oldest first: the order the member logged them in (discards included:
+ *  they are owed a delete). */
 export function sendOrder(items: OutboxItem[]): OutboxItem[] {
   return items
     .filter((i) => i.state === "pending")
@@ -134,6 +149,25 @@ export function classifySendError(err: {
   if (code && /^PGRST[23]/.test(code)) return "retry";
   if (status === 401 || status === 408 || status === 429 || status >= 500) return "retry";
   return "refused";
+}
+
+/** Did the server's copy of a queued entry miss the member's later edit?
+ *  (A send landed with its reply lost, then the waiting row was edited.)
+ *  Compares the fields an edit can change. */
+export function differsFromServer(item: OutboxItem, row: LogRow): boolean {
+  const e = item.entry;
+  const num = (v: number | string | null) => (v == null ? null : Number(v));
+  return (
+    e.entry_type !== row.entry_type ||
+    e.from_ref !== row.from_ref ||
+    e.to_ref !== row.to_ref ||
+    num(e.amount) !== num(row.amount) ||
+    e.unit !== row.unit ||
+    num(e.juz) !== num(row.juz) ||
+    num(e.part) !== num(row.part) ||
+    (e.notes ?? null) !== (row.notes ?? null) ||
+    (e.mushaf != null && e.mushaf !== row.mushaf)
+  );
 }
 
 /** "Log for today" on an entry refused because yesterday had closed: the

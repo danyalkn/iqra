@@ -26,6 +26,7 @@ export function SyncController() {
   const { user } = useSession();
   const userId = user?.id ?? null;
   const { items } = useOutbox(userId);
+  // Discards count: they still owe the server a delete.
   const waiting = items.filter((i) => i.state === "pending").length;
   const delay = useRef(BACKOFF_START_MS);
 
@@ -55,9 +56,11 @@ export function SyncController() {
         if (AppState.currentState === "active") {
           const result = await syncOutbox(userId);
           if (cancelled) return;
-          delay.current = result.offline
-            ? Math.min(delay.current * 2, BACKOFF_MAX_MS)
-            : BACKOFF_START_MS;
+          // Offline, or a server that keeps saying "later" (5xx, schema
+          // cache): back off either way; anything settled starts over.
+          delay.current = result.progressed
+            ? BACKOFF_START_MS
+            : Math.min(delay.current * 2, BACKOFF_MAX_MS);
         }
         schedule();
       }, delay.current);

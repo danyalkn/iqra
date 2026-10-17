@@ -41,7 +41,7 @@ export async function insertEntry(
   userId: string,
   groupId: string,
   payload: NewEntry,
-  opts: { id?: string; offlineLoggedAt?: string | null } = {},
+  opts: { id?: string; offlineLoggedAt?: string | null; signal?: AbortSignal } = {},
 ): Promise<InsertResult> {
   const base: Record<string, unknown> = {
     ...(opts.id ? { id: opts.id } : {}),
@@ -58,14 +58,14 @@ export async function insertEntry(
     part: payload.part,
     notes: payload.notes,
   };
-  let res = await supabase
-    .from("log_entries")
-    .insert(payload.mushaf != null ? { ...base, mushaf: payload.mushaf } : base)
-    .select("*")
-    .single();
+  const send = (row: Record<string, unknown>) => {
+    const q = supabase.from("log_entries").insert(row).select("*");
+    return (opts.signal ? q.abortSignal(opts.signal) : q).single();
+  };
+  let res = await send(payload.mushaf != null ? { ...base, mushaf: payload.mushaf } : base);
   // Retry without mushaf if that column isn't in the schema yet.
   if (isMissingMushaf(res.error) && payload.mushaf != null) {
-    res = await supabase.from("log_entries").insert(base).select("*").single();
+    res = await send(base);
   }
   if (res.error || !res.data) {
     return {

@@ -160,13 +160,20 @@ export async function updateQueued(
 }
 
 /** Discard one queued item for the member. Waits out a send in flight;
- *  false when it was sent meanwhile (the caller deletes the server row). */
+ *  false when it was sent meanwhile (the caller deletes the server row).
+ *  An item whose earlier send failed may have landed with its reply lost,
+ *  so it stays queued as a discard: the sync deletes that id on the
+ *  server, and it is hidden until then. */
 export async function discardQueued(userId: string, id: string): Promise<boolean> {
   const items = await settledItems(userId, id);
-  if (!items.some((i) => i.id === id)) return false;
+  const current = items.find((i) => i.id === id);
+  if (!current) return false;
+  const owesDelete = current.state === "pending" && current.attempts > 0;
   await set(
     userId,
-    items.filter((i) => i.id !== id),
+    owesDelete
+      ? items.map((i) => (i.id === id ? { ...i, discard: true } : i))
+      : items.filter((i) => i.id !== id),
   );
   return true;
 }
@@ -223,6 +230,7 @@ export function settleSend(
 export function markUnsent(userId: string): Promise<void> {
   const items = memory.get(userId);
   if (!items?.some((i) => i.state === "pending" && i.attempts === 0 && !isSending(userId, i.id))) {
+    // Nothing waiting for its first attempt.
     return Promise.resolve();
   }
   return set(
