@@ -10,7 +10,14 @@ When the code and this file disagree, this file wins; ask the owner.
 - **Email + password, not OTP.** OTP needs an email-sending service forever,
   while group membership (RLS) is the real gate, so an unverified email is
   harmless. Supabase "Confirm email" is OFF. There is no email service at
-  all. Password resets are done by the owner in the Supabase dashboard.
+  all, so there is no emailed reset link.
+- **Forgotten passwords (owner decision 2026-10-17):** Profile, Settings,
+  Reset password sets a new one with only the live session as proof (no old
+  password, no email; `supabase.auth.updateUser`). Native only: the web app
+  stays frozen. A member signed in only on the web gets a temporary password
+  from the owner (`supabase/admin_examples.sql` step 5), signs into native
+  with it, then resets it there. Keep Supabase "Secure password change" OFF:
+  it would demand an emailed nonce nobody can receive.
 - Sign-up has confirm-email and confirm-password fields; paste is allowed.
 - Members are added to a circle by the owner with `supabase/admin_examples.sql`.
   There is no in-app invite flow and none is planned.
