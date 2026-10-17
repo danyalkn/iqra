@@ -39,7 +39,7 @@ import {
   takeEntriesChanged,
   updateEntry,
 } from "@/data/entryWrites";
-import { onSynced, syncOutbox } from "@/data/sync";
+import { onRemoved, onSynced, syncOutbox } from "@/data/sync";
 import {
   fetchMyDayReminders,
   fetchMyHifzHistory,
@@ -331,8 +331,13 @@ export default function TodayScreen() {
   const [remindersKey, setRemindersKey] = useState("saved");
   // Rows the outbox sent lately. A read that started before one landed can
   // answer after it without it; such rows are added back (never replacing
-  // the server's copy, which may hold a later edit).
+  // the server's copy, which may hold a later edit). A read that started
+  // after it landed and lacks it means it was deleted (the Journal, the
+  // web), so only rows newer than the read's start come back.
   const recentlySynced = useRef(new Map<string, { row: LogRow; at: number }>());
+  // Edits on screen that the server has not confirmed: the saved copy is
+  // not written meanwhile (a kill would leave an edit that never landed).
+  const editsInFlight = useRef(0);
 
   // The web page did this on the server: recent entries and today's +
   // tomorrow's one-time reminders in one go, once the circle is known. Here
@@ -342,6 +347,7 @@ export default function TodayScreen() {
   const loadToday = useCallback((): Promise<void> => {
     if (!groupId || !userId) return Promise.resolve();
     const seq = ++loadSeq.current;
+    const startedAt = Date.now();
     // Offline the reads can take half a minute to fail: show what was saved
     // last time at once, then let the server's answer replace it.
     if (!seeded.current) {
@@ -400,7 +406,7 @@ export default function TodayScreen() {
       const have = new Set(recent.rows.map((r) => r.id));
       for (const [id, v] of recentlySynced.current) {
         if (v.at < cutoffMs) recentlySynced.current.delete(id);
-        else if (!have.has(id)) missing.push(v.row);
+        else if (v.at >= startedAt && !have.has(id)) missing.push(v.row);
       }
       setEntries(missing.length ? [...missing, ...recent.rows] : recent.rows);
       if (remindersSeeded.current) {
@@ -435,7 +441,7 @@ export default function TodayScreen() {
   // offline launch or a notification button continues from the latest rows
   // this phone knows. Never before something real is on screen.
   useEffect(() => {
-    if (!userId || loadState !== "ready") return;
+    if (!userId || loadState !== "ready" || editsInFlight.current > 0) return;
     void writeCache("today", userId, { entries: serverEntries, reminders: dayReminders ?? [] });
   }, [userId, loadState, serverEntries, dayReminders]);
 
@@ -526,6 +532,16 @@ export default function TodayScreen() {
       for (const row of rows) recentlySynced.current.set(row.id, { row, at });
       setEntries((prev) => upsertRows(prev, rows));
       setOffline(false);
+    });
+  }, [userId]);
+
+  // A discarded entry deleted on the server leaves the list for good.
+  useEffect(() => {
+    if (!userId) return;
+    return onRemoved((uid, id) => {
+      if (uid !== userId) return;
+      recentlySynced.current.delete(id);
+      setEntries((prev) => prev.filter((e) => e.id !== id));
     });
   }, [userId]);
 
@@ -691,6 +707,7 @@ export default function TodayScreen() {
       }
     }
     const original = serverEntries.find((e) => e.id === id);
+    editsInFlight.current += 1;
     setEntries((p) =>
       p.map((e) =>
         e.id === id
@@ -702,7 +719,9 @@ export default function TodayScreen() {
           : e,
       ),
     );
-    const { row, error } = await updateEntry(id, payload);
+    const { row, error } = await updateEntry(id, payload).finally(() => {
+      editsInFlight.current -= 1;
+    });
     if (error || !row) {
       // Put back only this row: others may have changed meanwhile.
       if (original) setEntries((p) => p.map((e) => (e.id === id ? original : e)));
