@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { LogOut, NotebookPen } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from "react";
 import {
+  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -22,9 +23,12 @@ import { RemindersManager } from "@/components/settings/RemindersManager";
 import { ResetPassword } from "@/components/settings/ResetPassword";
 import { Button, Card, SegmentedControl } from "@/components/ui";
 import { Type } from "@/constants/theme";
+import { syncOutbox } from "@/data/sync";
+import { withTimeout } from "@/data/timeout";
 import { useTheme } from "@/hooks/use-theme";
 import { useSession } from "@/providers/SessionProvider";
 import { useThemeContext, type ThemePreference } from "@/providers/ThemeProvider";
+import { loadOutbox } from "@/storage/outbox";
 
 /** The web footer showed the git BUILD; native shows the app version from
  *  app.json (Constants.expoConfig is null in some bare contexts, hence "dev"). */
@@ -77,6 +81,35 @@ export default function ProfileScreen() {
   const { user, signOut } = useSession();
   const { preference, setPreference } = useThemeContext();
   const [signingOut, setSigningOut] = useState(false);
+
+  // Signing out discards the outbox (it is this member's and must never
+  // sync into the next account), so entries not yet sent get one more try
+  // and then a choice: wait for a connection, or discard them
+  // (docs/NEXT-SESSION.md "Sign-out with a non-empty outbox").
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    const userId = user?.id;
+    if (userId) {
+      await withTimeout(syncOutbox(userId), 5000);
+      const left = (await loadOutbox(userId)).length;
+      if (left > 0) {
+        const one = left === 1;
+        Alert.alert(
+          one ? "1 entry hasn’t synced yet" : `${left} entries haven’t synced yet`,
+          `Signing out now discards ${one ? "it" : "them"} from this phone. Stay signed in and ${
+            one ? "it syncs" : "they sync"
+          } when you’re back online.`,
+          [
+            { text: "Stay signed in", style: "cancel", onPress: () => setSigningOut(false) },
+            { text: "Discard and sign out", style: "destructive", onPress: () => void signOut() },
+          ],
+          { cancelable: true, onDismiss: () => setSigningOut(false) },
+        );
+        return;
+      }
+    }
+    void signOut();
+  };
 
   // ── Scroll to a settings section ──────────────────────────────────────────
   // Positions come from onLayout: the settings block's y inside the scroll
@@ -204,10 +237,7 @@ export default function ProfileScreen() {
             variant="secondary"
             fullWidth
             loading={signingOut}
-            onPress={() => {
-              setSigningOut(true);
-              void signOut();
-            }}
+            onPress={() => void handleSignOut()}
           >
             <LogOut size={16} color={c.foreground} />
             <Text style={[Type.callout, styles.signOutLabel, { color: c.foreground }]}>
