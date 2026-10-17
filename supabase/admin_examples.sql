@@ -33,6 +33,16 @@ on conflict (group_id, user_id) do nothing;
 -- delete from public.group_members
 -- where group_id = '...' and user_id = (select id from auth.users where email = 'ex@example.com');
 
+-- 5) Give a locked-out member a temporary password (there is no email
+--    service, so no reset link can be sent). They sign in with it, then pick
+--    their own in the app: Profile, Settings, Reset password. Their existing
+--    sessions (e.g. the web app) stay signed in. pgcrypto lives in the
+--    `extensions` schema on Supabase; bcrypt is what Supabase Auth verifies.
+-- update auth.users
+-- set encrypted_password = extensions.crypt('temporary-password', extensions.gen_salt('bf')),
+--     updated_at = now()
+-- where email = 'friend@example.com';
+
 -- ── Sanity check: a brand-new (membership-less) account sees nothing ────────
 -- Run impersonating a user (Supabase SQL editor: set request.jwt.claims).
 -- With no group_members row, every one of these must return 0 rows except the
