@@ -108,7 +108,7 @@ SQL after each:
    interactively the first time; send the expo.dev link to the Android
    member. No pushes for them until owner task 4.
 5. **EAS Update** for every JS fix from now on:
-   `npx eas-cli@latest update --channel production --environment production --message "..."`
+   `npx eas-cli@latest update --channel production --environment production --platform ios --message "..."`
    (`--environment` is required on SDK 55+; `EXPO_PUBLIC_SUPABASE_*` must
    exist in that EAS environment, `eas env:list`). `development` and
    `preview` channels the same way.

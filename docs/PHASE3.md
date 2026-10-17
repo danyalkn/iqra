@@ -335,7 +335,8 @@ opening the app, is handed off in `docs/PHASE4.md`.
    to the Android member (they accept the "unknown source" warning). Push
    for Android waits for owner task 6.
 6. EAS Update for JS-only fixes: `npx eas-cli@latest update --channel
-   production --environment production --message "..."` (`--environment`
+   production --environment production --platform ios --message "..."`
+   (always pass `--platform`: the web export crashes; `--environment`
    is required on SDK 55+; the `EXPO_PUBLIC_SUPABASE_*` values must exist in
    that EAS environment, `eas env:list`, or the update bundle has no
    Supabase config). Same for `development` / `preview`. Staged rollout
