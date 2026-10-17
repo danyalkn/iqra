@@ -7,6 +7,7 @@
     "icon": "./assets/brand/icon-1024.png",
     "scheme": "iqra",
     "userInterfaceStyle": "automatic",
+    "platforms": ["ios", "android"],
     "ios": {
       "bundleIdentifier": "com.qadamtechnologies.iqra",
       "supportsTablet": false,
