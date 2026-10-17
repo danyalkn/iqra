@@ -19,6 +19,7 @@ import { MushafSelect } from "@/components/settings/MushafSelect";
 import { NotificationsToggle } from "@/components/settings/NotificationsToggle";
 import { ProfileSection } from "@/components/settings/ProfileSection";
 import { RemindersManager } from "@/components/settings/RemindersManager";
+import { ResetPassword } from "@/components/settings/ResetPassword";
 import { Button, Card, SegmentedControl } from "@/components/ui";
 import { Type } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
@@ -55,8 +56,8 @@ function asSection(v: string | null): SettingsSection | null {
  * screen is settings first. Order: the identity card (tapping it edits name,
  * mode and time zone), a "Settings" heading with every setting in the web
  * settings page's order (mushaf, appearance, notifications, celebration,
- * daily reminders), the Journal link, then sign out / delete account and the
- * build line last. Nothing here loads data, so there is no pull-to-refresh.
+ * daily reminders, reset password), the Journal link, then sign out / delete
+ * account and the build line last. Nothing here loads data, so there is no pull-to-refresh.
  * /profile?section=settings|notifications|reminders scrolls to the settings
  * block (Today's gear, the "Turn them on in Settings" link in DayReminders).
  *
@@ -177,6 +178,8 @@ export default function ProfileScreen() {
             <CelebrateToggle />
 
             <View onLayout={onRemindersLayout}>{user && <RemindersManager userId={user.id} />}</View>
+
+            <ResetPassword />
           </View>
         </View>
 

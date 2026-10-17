@@ -22,7 +22,9 @@ type Mode = "signin" | "signup";
 
 /**
  * Ported from reference/web-pwa/app/login/LoginForm.tsx. Email + password
- * only (docs/DECISIONS.md § Auth): no OTP, no reset flow, paste allowed.
+ * only (docs/DECISIONS.md § Auth): no OTP, no emailed reset link, paste
+ * allowed. A forgotten password is reset from Settings while signed in; a
+ * member signed out everywhere gets a temporary one from the owner first.
  * On success the session provider sees SIGNED_IN and the root gate moves
  * to onboarding or the tabs; nothing navigates here.
  */
@@ -221,8 +223,8 @@ export default function LoginScreen() {
         </Pressable>
 
         <Text style={[Type.footnote, styles.footer, { color: c.faint }]}>
-          Stay signed in across launches. Forgot your password? Ask the group owner to reset
-          it.
+          Stay signed in across launches. Forgot your password? Ask the group owner for a
+          temporary one, then set your own in Profile.
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
