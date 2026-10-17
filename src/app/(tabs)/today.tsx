@@ -38,6 +38,7 @@ import {
   takeEntriesChanged,
   updateEntry,
 } from "@/data/entryWrites";
+import { fetchMyDayReminders, fetchMyRecentEntries } from "@/data/entryReads";
 import { useMembership } from "@/hooks/use-membership";
 import { useNow } from "@/hooks/use-now";
 import { useTheme } from "@/hooks/use-theme";
@@ -69,7 +70,6 @@ import {
 import type { DayReminder, LogRow, NewEntry } from "@/lib/types";
 import { useSession } from "@/providers/SessionProvider";
 import { PREF_KEYS, readPref } from "@/storage/prefs";
-import { supabase } from "@/supabase/client";
 
 type Filter = "all" | "new" | "revision";
 
@@ -141,46 +141,6 @@ function fabBottomOffset(insetBottom: number): number {
 
 /** How long the LogSheet's Modal stays mounted while it slides out. */
 const SHEET_CLOSE_MS = SHEET_CLOSE;
-
-/** Native-side reads that keep the error. The shared lib/data helpers (kept
- *  verbatim with the web) collapse a failed request into [], so a dropped
- *  connection would look like "never logged anything". The web could live
- *  with that: its server re-ran the queries on every visit and its client
- *  refetch checked `data &&`. Same select, filters and order as
- *  getMyRecentEntries / getMyDayReminders in src/lib/data.ts. */
-async function fetchMyRecentEntries(
-  groupId: string,
-  userId: string,
-  sinceDays = 120,
-): Promise<{ rows: LogRow[] | null; error: boolean }> {
-  const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
-    .from("log_entries")
-    .select("*")
-    .eq("group_id", groupId)
-    .eq("user_id", userId)
-    .gte("logged_at", since)
-    .order("logged_at", { ascending: false });
-  if (error) return { rows: null, error: true };
-  return { rows: (data as LogRow[] | null) ?? [], error: false };
-}
-
-async function fetchMyDayReminders(
-  userId: string,
-  fromYmd: string,
-  toYmd: string,
-): Promise<{ rows: DayReminder[] | null; error: boolean }> {
-  const { data, error } = await supabase
-    .from("day_reminders")
-    .select("*")
-    .eq("user_id", userId)
-    .gte("remind_on", fromYmd)
-    .lte("remind_on", toYmd)
-    .order("remind_on", { ascending: true })
-    .order("time", { ascending: true });
-  if (error) return { rows: null, error: true };
-  return { rows: (data as DayReminder[] | null) ?? [], error: false };
-}
 
 /** First load of entries + reminders: not started, landed, or failed before
  *  ever landing. Once "ready" it stays ready; later refreshes that fail keep
@@ -334,10 +294,14 @@ export default function TodayScreen() {
   }, [loadToday]);
 
   // The OS may have killed the sockets while the app was away; a load that
-  // never landed gets another go on return.
+  // never landed gets another go on return. So does a list the Android
+  // notification task changed while the app was in the background (it
+  // leaves the same flag the Journal does, and a return to the foreground
+  // is not a focus): logging from the sheet must continue from the new row.
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active" && loadStateRef.current === "failed") void loadToday();
+      if (state !== "active") return;
+      if (loadStateRef.current === "failed" || takeEntriesChanged()) void loadToday();
     });
     return () => sub.remove();
   }, [loadToday]);
