@@ -25,7 +25,18 @@ import { WheelPicker } from "@/components/WheelPicker";
 import { Type } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { BACKDATE_CUTOFF, localHm, yesterdayLocal, zonedIso } from "@/lib/dates";
-import { ENTRY_META, isReadingType, type EntryType, type Unit } from "@/lib/entries";
+import { ENTRY_META, isReadingType, type EntryType } from "@/lib/entries";
+import {
+  defaultPortion,
+  freshHifzDefaults,
+  hifzEntry,
+  PORTIONS,
+  portionFromUnit,
+  readingEntry,
+  REV_PAGES,
+  SABAK_PAGES,
+  type Portion,
+} from "@/lib/entryDefaults";
 import {
   clampPage,
   DEFAULT_MUSHAF,
@@ -41,43 +52,14 @@ import {
   juzPageLabel,
   juzPageOptions,
   needsQuarters,
-  nextSabakStart,
   pagesPhrase,
   positionLabel,
   positionSaysAmount,
   rowJuzPage,
-  serializeJuzPage,
 } from "@/lib/position";
 import type { LogRow, NewEntry } from "@/lib/types";
 
-type Portion = "Full" | "Half" | "Quarter" | "Pages";
-const PORTIONS: Portion[] = ["Full", "Half", "Quarter", "Pages"];
 const JUZ = Array.from({ length: 30 }, (_, i) => i + 1);
-
-// Sabak (new memorization) is never more than a quarter (~5 pages) at a time.
-const SABAK_PAGES = [0.25, 0.5, 0.75, 1, 2, 3, 4, 5];
-// Revision can cover more.
-const REV_PAGES = [
-  0.25, 0.5, 0.75, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20,
-];
-
-const PORTION_UNIT: Record<Exclude<Portion, "Pages">, Unit> = {
-  Full: "juz",
-  Half: "hizb",
-  Quarter: "quarter",
-};
-
-function defaultPortion(t: EntryType): Portion {
-  return t === "dor" ? "Full" : "Quarter";
-}
-
-/** Reconstruct the portion wheel from a saved revision entry's unit. */
-function portionFromUnit(unit: Unit | null): Portion {
-  if (unit === "juz") return "Full";
-  if (unit === "hizb") return "Half";
-  if (unit === "quarter") return "Quarter";
-  return "Pages";
-}
 
 // The "Starts at" wheel: "–" = not specified, then half-page steps (quarter
 // steps whenever the amount or the start needs them).
@@ -111,6 +93,9 @@ type Props = {
   mushaf?: MushafId;
   /** Profile timezone - backdating must land on the right local day. */
   tz: string;
+  /** Pages to prefill for a fresh entry (a notification action's amount
+   *  arriving through /today?log=<type>&amount=<n>). Ignored when editing. */
+  presetAmount?: number | null;
 };
 
 /**
@@ -142,7 +127,7 @@ export function LogSheet(props: Props) {
   }
   // The row's id rather than its identity: a save confirming in the background
   // can swap the edited row for the server's copy without wiping the form.
-  const liveKey = `${generation}:${initialType}:${editing?.id ?? ""}:${mush}:${tz}`;
+  const liveKey = `${generation}:${initialType}:${editing?.id ?? ""}:${mush}:${tz}:${props.presetAmount ?? ""}`;
 
   // Live while open (the web's reset effect re-ran on these while open), but
   // frozen once `open` turns false: Today nulls `editing` in the same call
@@ -181,11 +166,13 @@ function initialForm({
   initialType,
   mush,
   last,
+  preset,
 }: {
   editing: LogRow | null | undefined;
   initialType: EntryType;
   mush: MushafId;
   last: LogRow | null | undefined;
+  preset: number | null | undefined;
 }) {
   const base = {
     notes: editing?.notes ?? "",
@@ -231,34 +218,21 @@ function initialForm({
   }
 
   // Fresh entry defaults: carry on from the last entry of this type, so
-  // tomorrow's sabak is usually one tap.
-  if (initialType === "sabak") {
-    const next = nextSabakStart(last, mush);
-    const amt = last?.amount != null ? +last.amount : 1;
-    return {
-      ...base,
-      juz: next?.juz ?? last?.juz ?? 1,
-      start: next?.start ?? null,
-      pages: SABAK_PAGES.includes(amt) ? amt : 1,
-      portion: defaultPortion(initialType),
-      part: 1,
-    };
+  // tomorrow's sabak is usually one tap. Shared with the notification
+  // actions (src/lib/entryDefaults), which save these defaults untouched.
+  if (!isReadingType(initialType)) {
+    const d = freshHifzDefaults(initialType, last, mush);
+    // A preset amount only lands where the wheels can show it.
+    if (preset != null) {
+      if (initialType === "sabak" && SABAK_PAGES.includes(preset)) d.pages = preset;
+      else if (initialType !== "sabak" && REV_PAGES.includes(preset)) {
+        d.portion = "Pages";
+        d.pages = preset;
+      }
+    }
+    return { ...base, ...d };
   }
-  if (!isReadingType(initialType) && last) {
-    const p = portionFromUnit(last.unit);
-    // Quarters and halves usually rotate: suggest the next one.
-    const max = p === "Half" ? 2 : p === "Quarter" ? 4 : 1;
-    const amt = last.amount != null ? +last.amount : 1;
-    return {
-      ...base,
-      juz: last.juz ?? 1,
-      portion: p,
-      part: last.part ? (last.part % max) + 1 : 1,
-      pages: p === "Pages" && REV_PAGES.includes(amt) ? amt : 1,
-      start: rowJuzPage(last),
-    };
-  }
-  return base;
+  return { ...base, pagesRead: preset != null ? String(preset) : "" };
 }
 
 function LogForm({
@@ -271,6 +245,7 @@ function LogForm({
   lastOfType,
   mush,
   tz,
+  presetAmount,
 }: Props & { mush: MushafId }) {
   const c = useTheme();
   const maxPage = totalPages(mush);
@@ -283,7 +258,9 @@ function LogForm({
   // opens (this mounts): a save confirming in the background swaps that row
   // for the server's copy, and re-deriving then would wipe what's being
   // typed. The web kept a ref for the same reason.
-  const [init] = useState(() => initialForm({ editing, initialType, mush, last: lastOfType }));
+  const [init] = useState(() =>
+    initialForm({ editing, initialType, mush, last: lastOfType, preset: presetAmount }),
+  );
 
   // hifz
   const [juz, setJuz] = useState(init.juz);
@@ -438,49 +415,22 @@ function LogForm({
         fail(`Last page must be 1–${maxPage}, or leave it blank.`);
         return;
       }
+      // Auto-advance is the shared constructor's default; a typed (or
+      // cleared) last page and a backdated reading keep the location that
+      // was resolved above instead.
       const loc = finalLoc;
-      entry = {
-        entry_type: initialType,
-        from_ref: null,
-        to_ref: loc ? String(loc.page) : null, // page; juz/surah derived
-        amount: amt,
-        unit: "page",
-        juz: loc ? loc.juz : null,
-        part: null,
-        mushaf: mush,
-        notes: notes.trim() || null,
-        logged_at: loggedAt,
-      };
-    } else if (sabak) {
-      entry = {
-        entry_type: initialType,
-        // Juz-relative start page ("3.5"), see src/lib/position.ts.
-        from_ref: start != null ? serializeJuzPage(start) : null,
-        to_ref: null,
-        amount: pages,
-        unit: "page",
-        juz,
-        part: null,
-        mushaf: mush,
-        notes: notes.trim() || null,
-        logged_at: loggedAt,
-      };
+      entry = autoAdvance
+        ? readingEntry(initialType, amt, lastReadPage ?? null, mush)
+        : {
+            ...readingEntry(initialType, amt, null, mush),
+            to_ref: loc ? String(loc.page) : null, // page; juz/surah derived
+            juz: loc ? loc.juz : null,
+          };
     } else {
-      // revision: Full / Half / Quarter / Pages
-      const isPages = portion === "Pages";
-      entry = {
-        entry_type: initialType,
-        from_ref: isPages && start != null ? serializeJuzPage(start) : null,
-        to_ref: null,
-        amount: isPages ? pages : 1,
-        unit: isPages ? "page" : PORTION_UNIT[portion],
-        juz,
-        part: portion === "Half" || portion === "Quarter" ? part : null,
-        mushaf: mush,
-        notes: notes.trim() || null,
-        logged_at: loggedAt,
-      };
+      // Sabak and revision rows from the wheel values (src/lib/entryDefaults).
+      entry = hifzEntry(initialType, { juz, portion, part, pages, start }, mush);
     }
+    entry = { ...entry, notes: notes.trim() || null, logged_at: loggedAt };
     // DECISIONS: haptics on log.
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onSave(entry);

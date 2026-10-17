@@ -33,7 +33,7 @@ import { CLOSE_MS as SHEET_CLOSE } from "@/components/ui/Sheet";
 import { Radius, Type } from "@/constants/theme";
 import {
   deleteEntry,
-  isMissingMushaf,
+  insertEntry,
   markEntriesChanged,
   takeEntriesChanged,
   updateEntry,
@@ -58,6 +58,7 @@ import {
   type EntryType,
   type Mode,
 } from "@/lib/entries";
+import { parseLogAmount } from "@/lib/entryDefaults";
 import {
   bookmarkLabel,
   DEFAULT_MUSHAF,
@@ -201,7 +202,7 @@ export default function TodayScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useSession();
   const { membership } = useMembership();
-  const params = useLocalSearchParams<{ log?: string; r?: string }>();
+  const params = useLocalSearchParams<{ log?: string; r?: string; amount?: string }>();
 
   const userId = user?.id ?? null;
   const mode: Mode = profile?.mode ?? "reading";
@@ -219,6 +220,9 @@ export default function TodayScreen() {
   const openLog: EntryType | null =
     log && (TYPES_BY_MODE[mode] as string[]).includes(log) ? (log as EntryType) : null;
   const openLogKey = openLog && isUuid(r) ? r : null;
+  // A notification action ("Log 5 pages") adds &amount=<n>: the sheet opens
+  // with the pages prefilled so Save is the only tap left (docs/PHASE3.md).
+  const openAmount = openLog ? parseLogAmount(oneParam(params.amount)) : null;
 
   const [entries, setEntries] = useState<LogRow[]>([]);
   // null until the first fetch lands: DayReminders owns its rows after
@@ -246,12 +250,17 @@ export default function TodayScreen() {
   // effect, which the lint rule forbids. A new link (different type or id)
   // while this screen stays mounted - a second push tap - is seen the same
   // way; one already consumed is not.
-  const linkId = openLog ? `${openLog}|${openLogKey ?? ""}` : null;
+  const linkId = openLog ? `${openLog}|${openLogKey ?? ""}|${openAmount ?? ""}` : null;
   const [seenLink, setSeenLink] = useState<string | null>(null);
   const [pendingLog, setPendingLog] = useState<EntryType | null>(null);
+  // Pages the link asked to prefill; the sheet reads it once per open.
+  const [sheetPreset, setSheetPreset] = useState<number | null>(null);
   if (linkId !== seenLink) {
     setSeenLink(linkId);
-    if (openLog && !deepLinkConsumed(openLogKey)) setPendingLog(openLog);
+    if (openLog && !deepLinkConsumed(openLogKey)) {
+      setPendingLog(openLog);
+      setSheetPreset(openAmount);
+    }
   }
   // Release only once the rows are here (or the first fetch has given up):
   // the LogSheet freezes lastOfType at mount (its form key excludes it on
@@ -275,7 +284,7 @@ export default function TodayScreen() {
   useEffect(() => {
     if (!openLog) return;
     markDeepLinkConsumed(openLogKey);
-    router.setParams({ log: undefined, r: undefined });
+    router.setParams({ log: undefined, r: undefined, amount: undefined });
   }, [openLog, openLogKey]);
 
   // The current load state for callbacks that must not re-run when it
@@ -430,12 +439,14 @@ export default function TodayScreen() {
 
   const handlePick = (t: EntryType) => {
     setEditingEntry(null);
+    setSheetPreset(null);
     setSheetType(t);
     setSheetOpen(true);
   };
 
   const handleEdit = (entry: LogRow) => {
     setEditingEntry(entry);
+    setSheetPreset(null);
     setSheetType(entry.entry_type);
     setSheetOpen(true);
   };
@@ -516,39 +527,17 @@ export default function TodayScreen() {
     };
     setEntries((prev) => [optimistic, ...prev]);
 
-    const base: Record<string, unknown> = {
-      user_id: userId,
-      group_id: groupId,
-      ...(payload.logged_at ? { logged_at: payload.logged_at } : {}),
-      entry_type: payload.entry_type,
-      from_ref: payload.from_ref,
-      to_ref: payload.to_ref,
-      amount: payload.amount,
-      unit: payload.unit,
-      juz: payload.juz,
-      part: payload.part,
-      notes: payload.notes,
-    };
-    let res = await supabase
-      .from("log_entries")
-      .insert(payload.mushaf != null ? { ...base, mushaf: payload.mushaf } : base)
-      .select("*")
-      .single();
-    // Retry without mushaf if that column isn't in the schema yet.
-    if (isMissingMushaf(res.error) && payload.mushaf != null) {
-      res = await supabase.from("log_entries").insert(base).select("*").single();
-    }
-    const { data, error } = res;
+    const { row: data, error } = await insertEntry(userId, groupId, payload);
 
     if (error || !data) {
       setEntries((prev) => prev.filter((e) => e.id !== tempId));
       // Don't leave "Saved to yesterday." up next to the failure.
       setNotice(null);
-      setError(error?.message ?? "Couldn’t save that entry. Try again.");
+      setError(error ?? "Couldn’t save that entry. Try again.");
       failHaptic();
       return;
     }
-    setEntries((prev) => prev.map((e) => (e.id === tempId ? (data as LogRow) : e)));
+    setEntries((prev) => prev.map((e) => (e.id === tempId ? data : e)));
   };
 
   const handleDelete = async (id: string) => {
@@ -779,6 +768,7 @@ export default function TodayScreen() {
         lastOfType={editingEntry ? null : lastOfType}
         mushaf={mushaf}
         tz={tz}
+        presetAmount={editingEntry ? null : sheetPreset}
       />
 
       <Celebration trigger={celebrateTick} />
