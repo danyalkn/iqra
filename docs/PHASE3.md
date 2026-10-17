@@ -289,9 +289,11 @@ that refine the plan above:
   `expo-router/entry` (the docs require the task at module scope in an
   early module). `package.json` main points at it.
 
-Still open: device testing (checklist below), the version bump and the
-ship steps, deleting the `NOT_AVAILABLE` copy path in `src/data/account.ts`
-once `delete-account` is deployed.
+Later the same day: migration applied and both functions deployed from
+this machine, version bumped to 1.0.0, `NOT_AVAILABLE` path removed, and
+test pushes with action buttons verified on the owner's phone. What is
+still open, plus the owner's follow-up request that iOS actions log without
+opening the app, is handed off in `docs/PHASE4.md`.
 
 ## Ship: first TestFlight and the Android APK
 
