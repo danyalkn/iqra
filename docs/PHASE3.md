@@ -288,6 +288,19 @@ that refine the plan above:
 - **Custom entry** `index.js` imports `src/push/task` before
   `expo-router/entry` (the docs require the task at module scope in an
   early module). `package.json` main points at it.
+- **iOS log buttons write headless (2026-10-17, PHASE4.md option A).**
+  Supersedes the "iOS actions open the app" decision above and the
+  "never depend on it" line in the facts section: the actions use
+  `opensAppToForeground: false` on both platforms, iOS wakes or launches
+  the app in the background, and PushController calls the shared
+  `logInBackground` (also the Android task's body) when AppState is not
+  active. Entries are dated at the tap (`logged_at`), and before reporting
+  a failure the app looks for its own row by user, type and tap time, so
+  a suspension mid-write can neither move the entry to another day nor
+  invite a duplicate. Verified on the owner's iPhone on the TestFlight
+  build (1.0.0 (3) plus the EAS update): "Log 1 page" wrote the entry and
+  the confirmation arrived within seconds, the app stayed closed. A tap
+  while the app is on screen still opens the prefilled sheet.
 
 Later the same day: migration applied and both functions deployed from
 this machine, version bumped to 1.0.0, `NOT_AVAILABLE` path removed, and

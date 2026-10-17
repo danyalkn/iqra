@@ -152,6 +152,11 @@ nothing holds a background task open for the Supabase insert.
 
 ### Options, in the order to try
 
+**Result (2026-10-17): option A shipped** (commits 05062f2..ac62032,
+EAS update to production) and logged on the owner's iPhone from a
+TestFlight build. Still to confirm: a swiped-away app on a locked phone.
+Fall back to B only if that state loses writes.
+
 **A. JS-only, test first (an hour).** Set `opensAppToForeground: false`
 for the iOS actions. In `PushController.onResponse`, when `Platform.OS ===
 "ios"` and `AppState.currentState !== "active"`, call `performLog(parsed,
