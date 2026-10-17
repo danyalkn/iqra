@@ -114,8 +114,11 @@ exists but stays unscheduled (superseded by the lapse nudge).
 - Supabase project `uqsdzraczxkinvefrbog`. Tables need
   `grant select,insert,update,delete ... to authenticated` or you get
   "permission denied for table" (RLS alone is not enough).
-- Migrations are applied by pasting into the SQL editor (the CLI on the dev
-  machine is on the wrong account; `db push` and `db query --linked` 403).
+- Migrations are applied with `supabase db query --linked -f <file>` and
+  recorded with `supabase migration repair --status applied <version>`
+  (CLI linked to the project since 2026-10-16; before that they were pasted
+  into the SQL editor, which is why `db push` must not be used: the history
+  was repaired afterwards).
 - Verified-SQL pattern that works via the Management API: run
   `begin; <sql>; do $$ ... raise exception 'RESULTS %' ... $$` in one script
   so the transaction rolls back and the full result text comes back.

@@ -50,12 +50,12 @@ scoped fixes; the main session owns the decisions.
    member in the circle) for Beta App Review; TestFlight external testing
    needs both. Decide where the policy lives (a page on iqra.fly.dev is
    fine until the PWA retires).
-3. **Supabase**: this machine's CLI is on the wrong account, so the owner
-   (a) pastes the Phase 3 migration into the SQL editor and (b) deploys the
-   two edge functions from their own login:
-   `supabase functions deploy send-push` and
-   `supabase functions deploy delete-account --no-verify-jwt=false`
-   (the agent writes the code and tells the owner exactly when).
+3. ~~**Supabase**: paste the migration, deploy the functions~~ Done
+   2026-10-16 from this machine after the owner ran `supabase login`: the
+   Phase 3 migration is applied and recorded, `send-push` (v6) and
+   `delete-account` (v1) are deployed with JWT verification on (both answer
+   401 unauthenticated). A stray June function with slug `smart-api` and
+   name `send-push` still exists in the project; nothing calls it.
 4. **Expo access token**: only needed if "enhanced push security" is
    switched on for the project on expo.dev (then `supabase secrets set
    EXPO_ACCESS_TOKEN=...`). Check the project's push settings; leave it off

@@ -34,9 +34,15 @@ between web and native (auth, data loading, push, Screen Time).
   (Sabak / Sabak Para / Dhor explained, never bare jargon).
 - **No em dashes** anywhere in user-facing copy or push text (owner rule,
   enforced server-side too). Use a hyphen or restructure the sentence.
-- **Migrations cannot be pushed from this machine.** The Supabase CLI here is
-  logged into a different account. Write the migration file, then tell the
-  owner to paste it into the Supabase SQL editor. Say so explicitly.
+- **Migrations and edge functions go through the Supabase CLI** (since
+  2026-10-16 the CLI here is logged into the owner's account and linked to
+  the Iqra project). Apply a single new migration with
+  `supabase db query --linked -f supabase/migrations/<file>.sql`, then record
+  it with `supabase migration repair --status applied <version>`; do not use
+  `supabase db push` (the early migrations were pasted by hand and the
+  remote history was repaired after the fact). Deploy functions with
+  `supabase functions deploy <name>`. If the CLI is ever logged out, fall
+  back to telling the owner what to paste and deploy, and say so.
 
 ## Commands
 
