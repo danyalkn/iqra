@@ -63,6 +63,12 @@ export function markSignedIn(): void {
   signedIn = true;
 }
 
+/** SessionProvider: signed out by hand (supabase-js could not do it, so no
+ *  SIGNED_OUT event will clear the flag). */
+export function markSignedOut(): void {
+  signedIn = false;
+}
+
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;
   if (input instanceof URL) return input.href;

@@ -20,6 +20,7 @@ import { clearOutbox } from "@/storage/outbox";
 import {
   AUTH_STORAGE_KEY,
   markSignedIn,
+  markSignedOut,
   readStoredSession,
   supabase,
 } from "@/supabase/client";
@@ -56,6 +57,16 @@ const SessionContext = createContext<SessionContextValue | null>(null);
  *  session (offline it retries a refresh for up to half a minute). */
 const SESSION_WAIT_MS = 2500;
 
+/** How long the gate waits for a profile it has no saved copy of. Long
+ *  enough for a slow sign-in; offline with an expired token the read would
+ *  otherwise take over half a minute to fail. A profile that lands later
+ *  is still applied. */
+const PROFILE_WAIT_MS = 8000;
+
+/** How long Sign out waits for supabase-js, which first retries a token
+ *  refresh offline before giving up and leaving the session in place. */
+const SIGN_OUT_WAIT_MS = 3000;
+
 function toUser(u: User | null | undefined): SessionContextValue["user"] {
   return u ? { id: u.id, email: u.email ?? null } : null;
 }
@@ -67,6 +78,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // Guards against a slow profile fetch for user A landing after user B
   // signed in (or after sign-out).
   const activeUserId = useRef<string | null>(null);
+  // Bumped by every SIGNED_OUT, so a launch read of the stored session that
+  // was in flight when the session died is not applied after it.
+  const signOutEpoch = useRef(0);
 
   // `preferCache`: publish the last good copy at once and refresh it behind
   // (launch, auth events); without it, wait for the server (a screen that
@@ -86,8 +100,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       });
       return cached;
     }
-    const fresh = await fetchProfile(userId);
+    const request = fetchProfile(userId);
+    const res = await withTimeout(request, PROFILE_WAIT_MS);
     if (activeUserId.current !== userId) return null;
+    if (res === TIMED_OUT) {
+      void request.then((late) => {
+        if (late !== undefined && activeUserId.current === userId) setProfile(late);
+      });
+    }
+    const fresh = res === TIMED_OUT ? undefined : res;
     // A failed read with nothing cached: no better answer than none.
     const next = fresh ?? (await readCache("profile", userId));
     if (activeUserId.current !== userId) return null;
@@ -106,6 +127,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // used as is (see the header).
     (async () => {
       try {
+        const epoch = signOutEpoch.current;
         const res = await withTimeout(supabase.auth.getSession(), SESSION_WAIT_MS);
         if (cancelled) return;
         let initial = res === TIMED_OUT ? null : res.data.session;
@@ -114,6 +136,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           // dead refresh token is removed from storage at once).
           initial = await readStoredSession();
           if (cancelled) return;
+          if (signOutEpoch.current !== epoch) initial = null;
           if (initial) markSignedIn();
         }
         setSession(initial);
@@ -132,6 +155,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // The launch read above covers it, and offline this event carries no
       // session for a member who is still signed in.
       if (event === "INITIAL_SESSION") return;
+      if (event === "SIGNED_OUT") signOutEpoch.current += 1;
       const nextId = next?.user.id ?? null;
       // The revision nudges belong to the member who was signed in. Every
       // way out drops them, not only the Sign out button: a revoked or
@@ -199,13 +223,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
     // Local scope: drop this device's session and tokens. The gate flips as
     // soon as onAuthStateChange reports SIGNED_OUT.
-    const { error } = await supabase.auth.signOut({ scope: "local" });
+    const res = await withTimeout(supabase.auth.signOut({ scope: "local" }), SIGN_OUT_WAIT_MS);
+    const error = res === TIMED_OUT ? new Error("sign-out timed out") : res.error;
     if (error) {
       // supabase-js bails before clearing storage when the current session
       // cannot be loaded or refreshed. The user asked to leave, so clear the
       // stored session ourselves and flip the gate.
       console.warn("Sign out did not complete cleanly", error);
       await secureStorage.removeItem(AUTH_STORAGE_KEY);
+      markSignedOut();
       activeUserId.current = null;
       setProfile(null);
       setSession(null);
