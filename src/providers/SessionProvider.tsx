@@ -10,10 +10,19 @@ import {
   type ReactNode,
 } from "react";
 
+import { fetchProfile } from "@/data/profile";
+import { TIMED_OUT, withTimeout } from "@/data/timeout";
 import { isOnboarded as computeOnboarded, type Profile } from "@/lib/auth";
 import { unregisterPush } from "@/push/register";
 import { cancelRevisionNudges } from "@/push/revisionNudge";
-import { AUTH_STORAGE_KEY, supabase } from "@/supabase/client";
+import { clearCaches, readCache } from "@/storage/cache";
+import { clearOutbox } from "@/storage/outbox";
+import {
+  AUTH_STORAGE_KEY,
+  markSignedIn,
+  readStoredSession,
+  supabase,
+} from "@/supabase/client";
 import { secureStorage } from "@/supabase/secureStorage";
 
 /**
@@ -21,6 +30,14 @@ import { secureStorage } from "@/supabase/secureStorage";
  * where Next re-read it per request). Native keeps it in memory, refreshes it
  * on every auth event, and exposes refreshProfile() for screens that write
  * to `profiles` (onboarding, Settings) so the gate and headers update at once.
+ *
+ * Offline (docs/NEXT-SESSION.md "Offline logging"): the member stays signed
+ * in. supabase-js reports no session when its access token expired and the
+ * refresh cannot reach the server (it keeps the stored one and refreshes it
+ * once the connection returns, which arrives here as TOKEN_REFRESHED), so
+ * the stored session stands in until then. The profile comes from its last
+ * good copy first and is refreshed behind it, so neither the splash nor the
+ * gate waits on the network.
  */
 type SessionContextValue = {
   /** True until the persisted session has been read from secure storage. */
@@ -35,14 +52,9 @@ type SessionContextValue = {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-async function loadProfile(userId: string): Promise<Profile | null> {
-  const { data } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
-    .maybeSingle();
-  return (data as Profile | null) ?? null;
-}
+/** How long the splash waits for supabase-js before using the stored
+ *  session (offline it retries a refresh for up to half a minute). */
+const SESSION_WAIT_MS = 2500;
 
 function toUser(u: User | null | undefined): SessionContextValue["user"] {
   return u ? { id: u.id, email: u.email ?? null } : null;
@@ -56,13 +68,28 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // signed in (or after sign-out).
   const activeUserId = useRef<string | null>(null);
 
-  const syncProfile = useCallback(async (userId: string | null) => {
+  // `preferCache`: publish the last good copy at once and refresh it behind
+  // (launch, auth events); without it, wait for the server (a screen that
+  // just wrote to `profiles`).
+  const syncProfile = useCallback(async (userId: string | null, preferCache = true) => {
     activeUserId.current = userId;
     if (!userId) {
       setProfile(null);
       return null;
     }
-    const next = await loadProfile(userId);
+    const cached = preferCache ? await readCache("profile", userId) : null;
+    if (activeUserId.current !== userId) return null;
+    if (cached) {
+      setProfile(cached);
+      void fetchProfile(userId).then((fresh) => {
+        if (fresh !== undefined && activeUserId.current === userId) setProfile(fresh);
+      });
+      return cached;
+    }
+    const fresh = await fetchProfile(userId);
+    if (activeUserId.current !== userId) return null;
+    // A failed read with nothing cached: no better answer than none.
+    const next = fresh ?? (await readCache("profile", userId));
     if (activeUserId.current !== userId) return null;
     setProfile(next);
     return next;
@@ -74,13 +101,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Initial read of the persisted session (secure storage), then the
     // profile, then let the gate render. onAuthStateChange also fires
     // INITIAL_SESSION, but awaiting getSession() here keeps `loading`
-    // honest even if that event is delayed.
+    // honest even if that event is delayed. Offline with an expired token
+    // getSession() answers late or not at all; the stored session is then
+    // used as is (see the header).
     (async () => {
       try {
-        const { data } = await supabase.auth.getSession();
+        const res = await withTimeout(supabase.auth.getSession(), SESSION_WAIT_MS);
         if (cancelled) return;
-        setSession(data.session);
-        await syncProfile(data.session?.user.id ?? null);
+        let initial = res === TIMED_OUT ? null : res.data.session;
+        if (!initial) {
+          // Still stored means supabase-js kept it for a later refresh (a
+          // dead refresh token is removed from storage at once).
+          initial = await readStoredSession();
+          if (cancelled) return;
+          if (initial) markSignedIn();
+        }
+        setSession(initial);
+        await syncProfile(initial?.user.id ?? null);
       } catch (e) {
         // A keychain read failure must not strand the app behind the splash;
         // fall through to the signed-out gate.
@@ -92,6 +129,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
       if (cancelled) return;
+      // The launch read above covers it, and offline this event carries no
+      // session for a member who is still signed in.
+      if (event === "INITIAL_SESSION") return;
       const nextId = next?.user.id ?? null;
       // The revision nudges belong to the member who was signed in. Every
       // way out drops them, not only the Sign out button: a revoked or
@@ -99,6 +139,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // would otherwise cancel them unmount. Best-effort and local.
       if (activeUserId.current && nextId !== activeUserId.current) {
         void cancelRevisionNudges();
+        // Their cached reads are private; the outbox stays, keyed to them,
+        // so signing back in still sends what they logged (it can never
+        // sync into another account). A deliberate sign-out clears both.
+        void clearCaches(activeUserId.current);
       }
       // TOKEN_REFRESHED for the same user does not change the profile.
       if (event === "TOKEN_REFRESHED" && nextId === activeUserId.current) {
@@ -125,10 +169,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [syncProfile]);
 
   const refreshProfile = useCallback(
-    () => syncProfile(activeUserId.current),
+    () => syncProfile(activeUserId.current, false),
     [syncProfile],
   );
 
+  // Callers with unsynced entries ask the member first (Profile); this
+  // discards them along with the cached reads.
   const signOut = useCallback(async () => {
     // This device's push row must go while the session can still delete it
     // (RLS blocks the delete once signed out). Best-effort with a short
@@ -140,7 +186,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // The revision nudges are this member's, scheduled on this device
         // (docs/DECISIONS.md "Revision plan"): the next person to sign in
         // must not get them. Local, so it is quick.
-        Promise.all([unregisterPush(userId, { keepFlag: true }), cancelRevisionNudges()]),
+        Promise.all([
+          unregisterPush(userId, { keepFlag: true }),
+          cancelRevisionNudges(),
+          // Local, quick: the outbox (the member chose to discard it) and
+          // every cached read (docs/NEXT-SESSION.md "Privacy").
+          clearOutbox(userId),
+          clearCaches(userId),
+        ]),
         new Promise((r) => setTimeout(r, 2500)),
       ]).catch(() => {});
     }

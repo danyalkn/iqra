@@ -4,6 +4,7 @@ import { AppState } from "react-native";
 import { getMyMembership } from "@/lib/data";
 import type { Membership } from "@/lib/types";
 import { useSession } from "@/providers/SessionProvider";
+import { readCache, writeCache } from "@/storage/cache";
 import { supabase } from "@/supabase/client";
 
 /**
@@ -19,6 +20,11 @@ import { supabase } from "@/supabase/client";
  * token) stays `undefined` with `failed` set, is retried when the app returns
  * to the foreground and whenever a screen mounts or calls `refresh()`, and
  * never shows "not in a circle" to a member who is in one (Phase 2 review).
+ *
+ * Offline (docs/NEXT-SESSION.md): the last answer is also kept on disk and
+ * shown while the network read is out (offline that read can take half a
+ * minute to fail), so Today opens on its saved data at once. The disk copy
+ * never counts as an answer here: the read is still retried as above.
  */
 const cache = new Map<string, Membership | null>();
 const inflight = new Map<string, Promise<Membership | null>>();
@@ -30,6 +36,7 @@ function load(userId: string, force = false): Promise<Membership | null> {
   const p = getMyMembership(supabase)
     .then((m) => {
       cache.set(userId, m);
+      void writeCache("membership", userId, { m });
       return m;
     })
     .finally(() => inflight.delete(userId));
@@ -53,6 +60,12 @@ export function useMembership(): {
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
+    if (!cache.has(userId)) {
+      void readCache("membership", userId).then((saved) => {
+        if (cancelled || !saved || cache.has(userId)) return;
+        setMembership((cur) => (cur === undefined ? saved.m : cur));
+      });
+    }
     const run = () =>
       load(userId).then(
         (m) => {
