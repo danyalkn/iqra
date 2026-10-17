@@ -19,6 +19,7 @@ export function EntryRow({
   onDelete,
   withDate = false,
   fullNotes = false,
+  sync,
 }: {
   entry: LogRow;
   tz: string;
@@ -28,11 +29,14 @@ export function EntryRow({
   withDate?: boolean;
   /** Show the whole note on its own lines instead of one truncated line. */
   fullNotes?: boolean;
+  /** Still in the offline outbox: being sent now ("saving", no actions), or
+   *  logged offline and waiting for a connection (still editable; the edit
+   *  stays on the device until it is sent). */
+  sync?: "saving" | "waiting";
 }) {
   const c = useTheme();
   const amt = quantityLabel(entry);
-  // Optimistic rows carry a temp id until the server copy replaces them.
-  const pending = entry.id.startsWith("temp-");
+  const saving = sync === "saving";
   const stamp = withDate
     ? `${dayLabel(localDate(entry.logged_at, tz))} · ${timeLabel(entry.logged_at, tz)}`
     : timeLabel(entry.logged_at, tz);
@@ -43,7 +47,7 @@ export function EntryRow({
         <View style={styles.head}>
           <Badge type={entry.entry_type} />
           <Text style={[Type.caption, styles.stamp, { color: c.faint }]}>
-            {pending ? "saving…" : stamp}
+            {saving ? "saving…" : sync === "waiting" ? `${stamp} · Waiting to sync` : stamp}
           </Text>
         </View>
         <Text numberOfLines={1} style={[Type.callout, styles.title, { color: c.foreground }]}>
@@ -64,7 +68,7 @@ export function EntryRow({
           </Text>
         )}
       </View>
-      {!pending && (onEdit || onDelete) && (
+      {!saving && (onEdit || onDelete) && (
         <View style={styles.actions}>
           {onEdit && (
             <Pressable

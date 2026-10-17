@@ -29,16 +29,17 @@ import { EntryRow } from "@/components/EntryRow";
 import { LogSheet } from "@/components/LogSheet";
 import { RevisionCard } from "@/components/RevisionCard";
 import { SpeedDial } from "@/components/SpeedDial";
+import { SyncIssues } from "@/components/SyncIssues";
 import { Card, SegmentedControl, type Segment } from "@/components/ui";
 import { CLOSE_MS as SHEET_CLOSE } from "@/components/ui/Sheet";
 import { Radius, Type } from "@/constants/theme";
 import {
   deleteEntry,
-  insertEntry,
   markEntriesChanged,
   takeEntriesChanged,
   updateEntry,
 } from "@/data/entryWrites";
+import { onSynced, syncOutbox } from "@/data/sync";
 import {
   fetchMyDayReminders,
   fetchMyHifzHistory,
@@ -46,6 +47,7 @@ import {
   type HifzHistoryRow,
 } from "@/data/entryReads";
 import { useMembership } from "@/hooks/use-membership";
+import { useOutbox } from "@/hooks/use-outbox";
 import { useNow } from "@/hooks/use-now";
 import { useTheme } from "@/hooks/use-theme";
 import {
@@ -66,6 +68,7 @@ import {
   type Mode,
 } from "@/lib/entries";
 import { parseLogAmount } from "@/lib/entryDefaults";
+import { redatedToNow, withPending, type OutboxItem } from "@/lib/outbox";
 import {
   bookmarkLabel,
   DEFAULT_MUSHAF,
@@ -80,8 +83,11 @@ import {
   type RevisionItem,
 } from "@/lib/revisionPlan";
 import type { DayReminder, LogRow, NewEntry } from "@/lib/types";
+import { uuidv4 } from "@/lib/uuid";
 import { useSession } from "@/providers/SessionProvider";
 import { useRevisionNudges } from "@/push/useRevisionNudges";
+import { readCache, writeCache } from "@/storage/cache";
+import { discardQueued, enqueue, outboxSnapshot, updateQueued } from "@/storage/outbox";
 import {
   PREF_KEYS,
   readPref,
@@ -160,12 +166,21 @@ function fabBottomOffset(insetBottom: number): number {
 /** How long the LogSheet's Modal stays mounted while it slides out. */
 const SHEET_CLOSE_MS = SHEET_CLOSE;
 
-/** First load of entries + reminders: not started, landed, or failed before
- *  ever landing. Once "ready" it stays ready; later refreshes that fail keep
- *  the list and show a banner instead. */
+/** First load of entries + reminders: not started, landed (from the server
+ *  or from the copy saved last time), or failed with nothing saved. Once
+ *  "ready" it stays ready; later refreshes that fail keep the list and say
+ *  it is the saved copy instead. */
 type LoadState = "loading" | "ready" | "failed";
 
-const REFRESH_ERROR = "Couldn’t refresh your entries. Pull down to try again.";
+/** Add rows the outbox just sent (or replace an older copy of them). */
+function upsertRows(prev: LogRow[], rows: LogRow[]): LogRow[] {
+  const ids = new Set(rows.map((r) => r.id));
+  return [...rows, ...prev.filter((r) => !ids.has(r.id))];
+}
+
+function entriesWord(n: number): string {
+  return n === 1 ? "1 entry" : `${n} entries`;
+}
 
 /**
  * Today (reference/web-pwa/app/(app)/today/TodayClient.tsx + page.tsx).
@@ -202,7 +217,9 @@ export default function TodayScreen() {
   // with the pages prefilled so Save is the only tap left (docs/PHASE3.md).
   const openAmount = openLog ? parseLogAmount(oneParam(params.amount)) : null;
 
-  const [entries, setEntries] = useState<LogRow[]>([]);
+  // The server's rows (or the saved copy of them). What the screen shows is
+  // `entries` below: these plus the outbox's entries still waiting to send.
+  const [serverEntries, setEntries] = useState<LogRow[]>([]);
   // null until the first fetch lands: DayReminders owns its rows after
   // mount (useState(initial), as on the web), so it is mounted only once the
   // real list is here instead of being seeded with [] and ignoring the rest.
@@ -210,6 +227,9 @@ export default function TodayScreen() {
   // including on a timezone change), so it is set exactly once.
   const [dayReminders, setDayReminders] = useState<DayReminder[] | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  // The last read failed and the screen shows the saved copy (docs/NEXT-SESSION.md
+  // "Cached reads"). Cleared by the next read or send that lands.
+  const [offline, setOffline] = useState(false);
   // The member's whole hifz history for the revision plan (the 120-day
   // entries would let an old juz drop out), with the instant below which it
   // is used instead of `entries` (see mergeRevisionEntries). null until a
@@ -287,6 +307,18 @@ export default function TodayScreen() {
   // change, focus) supersedes one still in flight, as the web's `cancelled`
   // flag did for its single refetch.
   const loadSeq = useRef(0);
+  // Set once a server read has landed: the saved copy must never paint over
+  // fresher rows, and is only read for the first load.
+  const landed = useRef(false);
+  const seeded = useRef(false);
+  // The saved copy is on screen (set with it, ahead of the loadState ref),
+  // and whether the last server read failed (it can fail first).
+  const seededReady = useRef(false);
+  const lastReadFailed = useRef(false);
+  // DayReminders reads `initial` once. When it was mounted with the saved
+  // copy, the server's first answer remounts it (new key) with fresh rows.
+  const remindersSeeded = useRef(false);
+  const [remindersKey, setRemindersKey] = useState("saved");
 
   // The web page did this on the server: recent entries and today's +
   // tomorrow's one-time reminders in one go, once the circle is known. Here
@@ -296,6 +328,24 @@ export default function TodayScreen() {
   const loadToday = useCallback((): Promise<void> => {
     if (!groupId || !userId) return Promise.resolve();
     const seq = ++loadSeq.current;
+    // Offline the reads can take half a minute to fail: show what was saved
+    // last time at once, then let the server's answer replace it.
+    if (!seeded.current) {
+      seeded.current = true;
+      void Promise.all([readCache("today", userId), readCache("hifz", userId)]).then(
+        ([saved, savedHifz]) => {
+          if (landed.current) return;
+          if (savedHifz) setHifzHistory(savedHifz);
+          if (!saved) return;
+          seededReady.current = true;
+          remindersSeeded.current = true;
+          setEntries(saved.entries);
+          setDayReminders((cur) => cur ?? saved.reminders);
+          setLoadState("ready");
+          if (lastReadFailed.current) setOffline(true);
+        },
+      );
+    }
     // A day inside the 120-day window: newer rows come from `entries`.
     const cutoff = new Date(Date.now() - 119 * 24 * 60 * 60 * 1000).toISOString();
     return Promise.all([
@@ -309,24 +359,39 @@ export default function TodayScreen() {
       if (!history.error && history.rows) {
         const rows = history.rows;
         setHifzHistory({ rows, cutoff });
+        void writeCache("hifz", userId, { rows, cutoff });
       }
       if (recent.error || !recent.rows || reminders.error || !reminders.rows) {
-        if (loadStateRef.current === "ready") {
-          // The list on screen is still good; say so and let the next focus
-          // try again (the web guarded this refetch with `data &&`).
+        lastReadFailed.current = true;
+        if (loadStateRef.current === "ready" || seededReady.current) {
+          // The list on screen is still good; say it is the saved copy and
+          // let the next focus try again (the web guarded this refetch with
+          // `data &&`).
           markEntriesChanged();
-          setError(REFRESH_ERROR);
+          setOffline(true);
         } else {
           setLoadState("failed");
         }
         return;
       }
+      landed.current = true;
+      lastReadFailed.current = false;
       const rows = reminders.rows;
       setEntries(recent.rows);
-      setDayReminders((cur) => cur ?? rows);
+      if (remindersSeeded.current) {
+        remindersSeeded.current = false;
+        setDayReminders(rows);
+        setRemindersKey("server");
+      } else {
+        setDayReminders((cur) => cur ?? rows);
+      }
       setLoadState("ready");
+      setOffline(false);
+      void writeCache("today", userId, { entries: recent.rows, reminders: rows });
+      // A read that landed means the connection is back: send what waits.
+      void syncOutbox(userId);
     });
-  }, [groupId, userId, tz, setEntries, setDayReminders, setLoadState, setError, setHifzHistory]);
+  }, [groupId, userId, tz, setEntries, setDayReminders, setLoadState, setOffline, setHifzHistory]);
 
   useEffect(() => {
     void loadToday();
@@ -348,11 +413,11 @@ export default function TodayScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await loadToday();
+      await Promise.all([loadToday(), userId ? syncOutbox(userId) : null]);
     } finally {
       setRefreshing(false);
     }
-  }, [loadToday]);
+  }, [loadToday, userId]);
 
   // Confetti-on-reading preference (device-local; toggled in Settings on the Profile tab).
   const [celebrateTick, setCelebrateTick] = useState(0);
@@ -384,6 +449,41 @@ export default function TodayScreen() {
       };
     }, [loadToday]),
   );
+
+  // The offline outbox (docs/NEXT-SESSION.md "Offline logging"): every new
+  // entry is queued with its own id and sent from there. Waiting entries
+  // join the list, the streak, "continue from" and the revision plan at
+  // once; refused ones are listed apart (SyncIssues) and count for nothing.
+  const outbox = useOutbox(userId);
+  const queued = useMemo(
+    () => outbox.items.filter((i) => i.groupId === groupId),
+    [outbox.items, groupId],
+  );
+  const entries = useMemo(() => withPending(serverEntries, queued), [serverEntries, queued]);
+  const queuedById = useMemo(() => new Map(queued.map((i) => [i.id, i])), [queued]);
+  const refused = queued.filter((i) => i.state === "rejected");
+  // Logged offline and not sent yet (a first send still in flight is just
+  // "saving", not waiting).
+  const waitingCount = queued.filter(
+    (i) => i.state === "pending" && i.attempts > 0 && !outbox.sending.has(i.id),
+  ).length;
+  const syncMark = (id: string): "saving" | "waiting" | undefined => {
+    const item = queuedById.get(id);
+    if (!item) return undefined;
+    if (outbox.sending.has(id) || item.attempts === 0) return "saving";
+    return "waiting";
+  };
+
+  // A sent entry joins the server rows before it leaves the queue, so it
+  // never blinks out of the list in between.
+  useEffect(() => {
+    if (!userId) return;
+    return onSynced((uid, rows) => {
+      if (uid !== userId) return;
+      setEntries((prev) => upsertRows(prev, rows));
+      setOffline(false);
+    });
+  }, [userId]);
 
   const now = useNow();
   const today = localDate(now, tz);
@@ -531,10 +631,22 @@ export default function TodayScreen() {
   };
 
   const handleUpdate = async (id: string, payload: NewEntry) => {
-    const prev = entries;
     // Edits never change logged_at - drop it so the spread keeps the original.
     const { logged_at: _omit, ...fields } = payload;
     void _omit;
+    // Still in the outbox: the edit stays on the device and goes up with the
+    // entry. Null means it was sent meanwhile; edit the server row then.
+    if (userId && queuedById.has(id)) {
+      const edited = await updateQueued(userId, id, (item) => ({
+        ...item,
+        entry: { ...item.entry, ...fields },
+      }));
+      if (edited) {
+        void syncOutbox(userId);
+        return;
+      }
+    }
+    const prev = serverEntries;
     setEntries((p) =>
       p.map((e) =>
         e.id === id
@@ -584,33 +696,33 @@ export default function TodayScreen() {
     const backdated =
       payload.logged_at != null && localDate(payload.logged_at, tz) !== today;
     if (backdated) setNotice("Saved to yesterday.");
-    // No crypto.randomUUID on Hermes; the row only needs a unique local id
-    // until the insert returns the real one (EntryRow reads the temp- prefix).
-    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const optimistic: LogRow = {
-      id: tempId,
-      user_id: userId,
-      group_id: groupId,
-      pages_equiv: pagesEquiv(payload.amount, payload.unit),
-      ...payload,
-      logged_at: payload.logged_at ?? new Date().toISOString(),
+    // Queued first, with its own id, then sent: online it leaves the queue
+    // within a moment; offline it waits there, marked, and is sent once
+    // when the connection is back (a retry hits the same primary key).
+    // Dated now on the device, so an entry saved offline at 23:50 stays on
+    // its day however late it is sent.
+    const savedAt = new Date().toISOString();
+    const item: OutboxItem = {
+      id: uuidv4(),
+      userId,
+      groupId,
+      entry: { ...payload, logged_at: payload.logged_at ?? savedAt },
+      savedAt,
+      attempts: 0,
+      state: "pending",
     };
-    setEntries((prev) => [optimistic, ...prev]);
-
-    const { row: data, error } = await insertEntry(userId, groupId, payload);
-
-    if (error || !data) {
-      setEntries((prev) => prev.filter((e) => e.id !== tempId));
-      // Don't leave "Saved to yesterday." up next to the failure.
-      setNotice(null);
-      setError(error ?? "Couldn’t save that entry. Try again.");
-      failHaptic();
-      return;
-    }
-    setEntries((prev) => prev.map((e) => (e.id === tempId ? data : e)));
+    await enqueue(item);
+    const result = await syncOutbox(userId);
+    if (result.offline) setOffline(true);
+    // Refused outright: it moves to the "Couldn't sync" card.
+    const left = outboxSnapshot(userId).items.find((i) => i.id === item.id);
+    if (left?.state === "rejected") failHaptic();
   };
 
   const handleDelete = async (id: string) => {
+    // Still in the outbox: dropping it is all there is to do. False means it
+    // was sent meanwhile (and has joined the server rows); delete that.
+    if (userId && queuedById.has(id) && (await discardQueued(userId, id))) return;
     setEntries((p) => p.filter((e) => e.id !== id));
     const error = await deleteEntry(id);
     if (error) {
@@ -623,6 +735,28 @@ export default function TodayScreen() {
       failHaptic();
       void loadToday();
     }
+  };
+
+  // A refused entry (SyncIssues): yesterday's window had closed, so log it
+  // for today instead; anything else, send it again. Or let it go.
+  const handleLogToday = (item: OutboxItem) => {
+    if (!userId) return;
+    void updateQueued(userId, item.id, (cur) => redatedToNow(cur, new Date().toISOString())).then(
+      () => syncOutbox(userId),
+    );
+  };
+  const handleRetry = (item: OutboxItem) => {
+    if (!userId) return;
+    void updateQueued(userId, item.id, (cur) => ({
+      ...cur,
+      state: "pending",
+      reason: undefined,
+      message: undefined,
+    })).then(() => syncOutbox(userId));
+  };
+  const handleDiscard = (item: OutboxItem) => {
+    if (!userId) return;
+    void discardQueued(userId, item.id);
   };
 
   const segments: Segment<Filter>[] = [
@@ -700,6 +834,24 @@ export default function TodayScreen() {
 
         {showBody && (
           <>
+            {/* Offline: the saved copy is on screen, and what was logged
+                since waits to sync. Quiet on purpose; nothing is wrong. */}
+            {(offline || waitingCount > 0) && (
+              <View style={styles.statusLine}>
+                <WifiOff size={14} color={c.faint} />
+                <Text style={[Type.footnote, styles.statusText, { color: c.muted }]}>
+                  {[
+                    offline ? "Offline, showing saved data." : null,
+                    waitingCount > 0
+                      ? `${entriesWord(waitingCount)} waiting to sync.`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                </Text>
+              </View>
+            )}
+
             {/* Stats */}
             {!loadFailed && (
               <View style={styles.statsRow}>
@@ -767,6 +919,19 @@ export default function TodayScreen() {
               </View>
             )}
 
+            {/* Entries the server refused, whatever day they were for. */}
+            {refused.length > 0 && (
+              <View style={styles.syncIssuesWrap}>
+                <SyncIssues
+                  items={refused}
+                  tz={tz}
+                  onLogToday={handleLogToday}
+                  onRetry={handleRetry}
+                  onDiscard={handleDiscard}
+                />
+              </View>
+            )}
+
             {/* Entries */}
             <View style={styles.entries}>
               {/* One-time reminders for later today - the section is also the
@@ -774,6 +939,7 @@ export default function TodayScreen() {
                   Mounted only once the first fetch has landed (see dayReminders). */}
               {groupId && userId && dayReminders && (
                 <DayReminders
+                  key={remindersKey}
                   ref={remindersRef}
                   userId={userId}
                   tz={tz}
@@ -812,6 +978,7 @@ export default function TodayScreen() {
                       tz={tz}
                       onEdit={handleEdit}
                       onDelete={handleDelete}
+                      sync={syncMark(e.id)}
                     />
                   ))}
                   {filtered.length === 0 && (
@@ -901,6 +1068,15 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   entries: { marginTop: 16, paddingHorizontal: 20, gap: 10 },
+  statusLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 24,
+    paddingBottom: 10,
+  },
+  statusText: { flex: 1 },
+  syncIssuesWrap: { paddingHorizontal: 20, paddingTop: 12 },
   sectionLabel: { paddingHorizontal: 4 },
   noneLabel: { paddingHorizontal: 4, paddingTop: 8 },
 });
