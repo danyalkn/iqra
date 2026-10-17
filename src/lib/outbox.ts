@@ -138,7 +138,9 @@ const CLOSED_TEXT = "Yesterday can only be logged until 3 AM";
 export function classifySendError(err: {
   status: number;
   code?: string | null;
-  message?: string | null;
+  /** Required on purpose: an insert result calls it `error`, and passing
+   *  that result whole once left the 3 AM text unread. */
+  message: string | null | undefined;
 }): SendFailure {
   const { status, code, message } = err;
   if (!status) return "offline";

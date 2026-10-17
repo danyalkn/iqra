@@ -184,7 +184,7 @@ async function sendClaimed(userId: string, item: OutboxItem): Promise<SendOutcom
       await settleSend(userId, current.id, null);
       return "sent";
     }
-    const kind = classifySendError(res);
+    const kind = classifySendError({ status: res.status, code: res.code, message: res.error });
     if (kind === "duplicate") {
       // An earlier send landed and its reply was lost. Confirm the row is
       // this member's (a stranger's id is not this entry), and carry over
