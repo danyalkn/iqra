@@ -82,7 +82,8 @@ export async function insertEntry(
 export async function updateEntry(
   id: string,
   payload: NewEntry,
-): Promise<{ row: LogRow | null; error: string | null }> {
+  signal?: AbortSignal,
+): Promise<{ row: LogRow | null; error: string | null; status: number }> {
   const base: Record<string, unknown> = {
     entry_type: payload.entry_type,
     from_ref: payload.from_ref,
@@ -93,26 +94,24 @@ export async function updateEntry(
     part: payload.part,
     notes: payload.notes,
   };
-  let res = await supabase
-    .from("log_entries")
-    .update(payload.mushaf != null ? { ...base, mushaf: payload.mushaf } : base)
-    .eq("id", id)
-    .select("*")
-    .single();
+  const send = (row: Record<string, unknown>) => {
+    const q = supabase.from("log_entries").update(row).eq("id", id).select("*");
+    return (signal ? q.abortSignal(signal) : q).single();
+  };
+  let res = await send(payload.mushaf != null ? { ...base, mushaf: payload.mushaf } : base);
   // Retry without mushaf if that column isn't in the schema yet.
   if (isMissingMushaf(res.error) && payload.mushaf != null) {
-    res = await supabase
-      .from("log_entries")
-      .update(base)
-      .eq("id", id)
-      .select("*")
-      .single();
+    res = await send(base);
   }
   if (res.error || !res.data) {
-    if (res.status === 0) return { row: null, error: NEEDS_CONNECTION };
-    return { row: null, error: res.error?.message ?? "Couldn’t save your changes. Try again." };
+    if (res.status === 0) return { row: null, error: NEEDS_CONNECTION, status: 0 };
+    return {
+      row: null,
+      error: res.error?.message ?? "Couldn’t save your changes. Try again.",
+      status: res.status,
+    };
   }
-  return { row: res.data as LogRow, error: null };
+  return { row: res.data as LogRow, error: null, status: res.status };
 }
 
 /** Delete an entry. Returns an error message, or null on success. */

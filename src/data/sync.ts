@@ -46,6 +46,18 @@ export type SyncResult = {
 type SyncedListener = (userId: string, rows: LogRow[]) => void;
 const syncedListeners = new Set<SyncedListener>();
 
+type RemovedListener = (userId: string, id: string) => void;
+const removedListeners = new Set<RemovedListener>();
+
+/** A discarded entry's id was deleted on the server: lists that still hold
+ *  the server's copy drop it (it was only hidden while the delete waited). */
+export function onRemoved(listener: RemovedListener): () => void {
+  removedListeners.add(listener);
+  return () => {
+    removedListeners.delete(listener);
+  };
+}
+
 /** Rows that just landed, before they leave the queue. */
 export function onSynced(listener: SyncedListener): () => void {
   syncedListeners.add(listener);
@@ -111,11 +123,22 @@ async function sendDiscard(userId: string, item: OutboxItem): Promise<SendOutcom
     .eq("id", item.id)
     .abortSignal(d.signal);
   d.done();
-  if (error && !status) {
-    await settleSend(userId, item.id, item);
-    return "offline";
+  if (error) {
+    const kind = classifySendError({ status, code: error.code, message: error.message });
+    if (kind === "offline" || kind === "retry") {
+      // Still owed: keep the tombstone (an expired token, a busy server).
+      await settleSend(userId, item.id, item);
+      return kind === "offline" ? "offline" : "kept";
+    }
+    // Refused (RLS: the row is not this member's) is as good as gone.
   }
-  // Refused (RLS: the row is not this member's) is as good as gone for them.
+  for (const l of removedListeners) {
+    try {
+      l(userId, item.id);
+    } catch (e) {
+      console.warn("Sync listener failed", e);
+    }
+  }
   await settleSend(userId, item.id, null);
   return "sent";
 }
@@ -128,12 +151,19 @@ async function reconcile(
   row: LogRow,
 ): Promise<{ row: LogRow } | { outcome: SendOutcome }> {
   if (!differsFromServer(item, row)) return { row };
-  const { row: updated, error } = await updateEntry(item.id, item.entry);
+  const d = deadline();
+  const { row: updated, error, status } = await updateEntry(item.id, item.entry, d.signal);
+  d.done();
   if (updated) return { row: updated };
-  // Keep the edit queued; the next run reads back and tries again.
-  await settleSend(userId, item.id, { ...item, attempts: item.attempts + 1 });
   console.warn("Outbox edit of a landed entry failed", error);
-  return { outcome: "offline" };
+  const kind = classifySendError({ status, message: error });
+  if (kind === "offline" || kind === "retry") {
+    // Keep the edit queued; the next run reads back and tries again.
+    await settleSend(userId, item.id, { ...item, attempts: item.attempts + 1 });
+    return { outcome: kind === "offline" ? "offline" : "kept" };
+  }
+  // The server will not take the edit: the entry itself is logged, keep that.
+  return { row };
 }
 
 async function sendClaimed(userId: string, item: OutboxItem): Promise<SendOutcome> {

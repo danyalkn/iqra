@@ -6,7 +6,7 @@ import { fetchMyHifzHistory, type HifzHistoryRow } from "@/data/entryReads";
 import { TIMED_OUT, withTimeout } from "@/data/timeout";
 import { todayLocal } from "@/lib/dates";
 import { ENTRY_META, isReadingType, type Mode } from "@/lib/entries";
-import { outboxRow } from "@/lib/outbox";
+import { outboxRow, waitingItems } from "@/lib/outbox";
 import { dueAhead, revisionPlan, type RevisionItem } from "@/lib/revisionPlan";
 import { readCache } from "@/storage/cache";
 import { loadOutbox } from "@/storage/outbox";
@@ -218,8 +218,8 @@ async function revisionInputs(
     // Today's window may hold hifz entries newer than the history copy.
     for (const r of today?.entries ?? []) if (!isReadingType(r.entry_type)) byId.set(r.id, r);
   }
-  for (const item of await loadOutbox(userId)) {
-    if (item.state !== "pending" || isReadingType(item.entry.entry_type)) continue;
+  for (const item of waitingItems(await loadOutbox(userId))) {
+    if (isReadingType(item.entry.entry_type)) continue;
     const r = outboxRow(item);
     byId.set(r.id, { id: r.id, entry_type: r.entry_type, juz: r.juz, logged_at: r.logged_at });
   }
