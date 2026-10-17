@@ -47,3 +47,21 @@ async function describe(error: unknown): Promise<string> {
   if (error instanceof FunctionsFetchError) return GENERIC;
   return error instanceof Error && error.message ? error.message : GENERIC;
 }
+
+/**
+ * Sets a new password for the signed-in member: the reset for a forgotten
+ * password (owner decision 2026-10-17, docs/DECISIONS.md § Auth). There is no
+ * email service, so the live session is the proof of identity and no old
+ * password or emailed link is asked for. Signed-out members still go to the
+ * owner (supabase/admin_examples.sql).
+ */
+export async function setPassword(password: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password });
+  if (!error) return;
+  // "Secure password change" in the Supabase dashboard would demand an
+  // emailed nonce for sessions older than 24h, which nobody here can receive.
+  if (error.code === "reauthentication_needed") {
+    throw new Error("Sign out and back in, then try again. If you can't, ask the group owner.");
+  }
+  throw new Error(error.message || "Couldn’t update your password.");
+}
