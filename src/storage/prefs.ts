@@ -16,6 +16,9 @@ export const PREF_KEYS = {
    *  capped), so the Android task and the foreground listener never write
    *  the same tap twice. */
   pushLogged: "iqra:push-logged",
+  /** Prefix of the per-user "hidden for today" revision rows (see
+   *  revisionHiddenKey). */
+  revisionHidden: "iqra:revision-hidden",
 } as const;
 
 /** "1" once this user turned push on from this device (the web's
@@ -24,6 +27,37 @@ export const PREF_KEYS = {
  *  adopt each other's registration. */
 export function pushEnabledKey(userId: string): string {
   return `iqra:push-enabled:${userId}`;
+}
+
+/** Revision plan rows the member hid on Today, `iqra:revision-hidden:<userId>`
+ *  holding `{ date, juz }` (docs/DECISIONS.md "Revision plan"): a hidden row
+ *  stays hidden for that profile-local date only and comes back tomorrow if
+ *  still due. Per user, like the push flag. */
+export function revisionHiddenKey(userId: string): string {
+  return `${PREF_KEYS.revisionHidden}:${userId}`;
+}
+
+/** The juz hidden on `date`; a stored list for any other date is stale and
+ *  reads as nothing hidden. */
+export async function readRevisionHidden(userId: string, date: string): Promise<number[]> {
+  try {
+    const raw = await readPref(revisionHiddenKey(userId));
+    const v: unknown = raw ? JSON.parse(raw) : null;
+    if (!v || typeof v !== "object") return [];
+    const { date: d, juz } = v as { date?: unknown; juz?: unknown };
+    if (d !== date || !Array.isArray(juz)) return [];
+    return juz.filter((j): j is number => typeof j === "number");
+  } catch {
+    return [];
+  }
+}
+
+export async function writeRevisionHidden(
+  userId: string,
+  date: string,
+  juz: number[],
+): Promise<void> {
+  await writePref(revisionHiddenKey(userId), JSON.stringify({ date, juz }));
 }
 
 export async function readPref(key: string): Promise<string | null> {
