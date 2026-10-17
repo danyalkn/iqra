@@ -12,6 +12,10 @@ export const PREF_KEYS = {
    *  sign-out delete the right push_subscriptions row even after the token
    *  rotated. Device-level: one token per install, whoever is signed in. */
   pushToken: "iqra:push-token",
+  /** Notification response ids already turned into a log entry (JSON array,
+   *  capped), so the Android task and the foreground listener never write
+   *  the same tap twice. */
+  pushLogged: "iqra:push-logged",
 } as const;
 
 /** "1" once this user turned push on from this device (the web's

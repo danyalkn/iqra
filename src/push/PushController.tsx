@@ -1,12 +1,14 @@
 import * as Notifications from "expo-notifications";
 import { router, useRootNavigationState, type Href } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
 
-import { toNativeHref } from "@/lib/deepLinks";
 import { useSession } from "@/providers/SessionProvider";
+import { parseResponse, sheetHref, wasLogged } from "@/push/actions";
+import { registerCategories } from "@/push/categories";
 import { isChatVisible } from "@/push/chatVisibility";
 import { syncPush } from "@/push/register";
+import { registerNotificationTask } from "@/push/task";
 
 /**
  * Headless component mounted once in the root layout, inside SessionProvider
@@ -25,9 +27,20 @@ import { syncPush } from "@/push/register";
  *    known gap). Warm taps arrive through the response listener; the cold
  *    start through useLastNotificationResponse. The two overlap, so every
  *    response is deduped by its request identifier.
+ *  - action buttons on reminders (logReading / logHifz categories): a tap
+ *    in the foreground, and every tap on iOS, opens the log sheet prefilled
+ *    with the type and amount (`/today?log=<type>&amount=<n>`). Android
+ *    taps with the app in the background are written headless by the task
+ *    in src/push/task.ts; this component ignores those (and any response
+ *    the task already logged) so nothing is written twice.
  *  - the launch / sign-in self-heal: re-register this device's token for a
  *    member who turned push on here (the web's syncPushSubscription).
  */
+
+// Categories are per install and the Android task must be registered every
+// launch; both are idempotent and best-effort.
+void registerCategories();
+void registerNotificationTask();
 
 const CHAT_TAG_PREFIX = "chat-";
 
@@ -56,14 +69,6 @@ Notifications.setNotificationHandler({
  *  its value on every remount and the warm listener can see the same tap. */
 const handled = new Set<string>();
 
-/** The in-app href a notification response asks for, or null for a response
- *  with no usable url (a bare action, a foreign payload). */
-export function hrefFromResponse(response: Notifications.NotificationResponse): string | null {
-  const data = response.notification.request.content.data;
-  const url = data?.url;
-  return toNativeHref(typeof url === "string" ? url : null);
-}
-
 export function PushController() {
   const { loading, session, isOnboarded, user } = useSession();
   const userId = user?.id ?? null;
@@ -84,11 +89,26 @@ export function PushController() {
     const id = response.notification.request.identifier;
     if (handled.has(id)) return;
     handled.add(id);
-    // Body tap (or any action without its own handling yet): route.
-    const href = hrefFromResponse(response);
-    if (!href) return;
-    pending.current = href;
-    setWake((n) => n + 1);
+    const queue = (href: string) => {
+      pending.current = href;
+      setWake((n) => n + 1);
+    };
+    const parsed = parseResponse(response);
+    if (parsed.kind === "open") {
+      if (parsed.href) queue(parsed.href);
+      return;
+    }
+    if (parsed.kind === "invalidAmount") {
+      queue(sheetHref(parsed.type, null, parsed.reminderId));
+      return;
+    }
+    // A log button. Android in the background: the task owns the write and
+    // this listener may still fire alongside it; stay out of its way.
+    if (Platform.OS === "android" && AppState.currentState !== "active") return;
+    // Already written by the task (a cold start replaying that response).
+    void wasLogged(id).then((done) => {
+      if (!done) queue(sheetHref(parsed.type, parsed.amount, parsed.reminderId));
+    });
   });
 
   useEffect(() => {
