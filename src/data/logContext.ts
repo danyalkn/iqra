@@ -33,8 +33,11 @@ export type LogContext = {
   fromCache: boolean;
 };
 
-/** A background launch has seconds before suspension; the write and the
- *  confirmation matter more than fresh rows. */
+/** A background launch may have only seconds before iOS suspends it, and
+ *  the entry is safe only once it is queued. With saved copies on the
+ *  device, fresh rows get a short look; without them there is nothing to
+ *  fall back on, so the reads get longer. */
+const QUICK_MS = 1500;
 const READ_MS = 4000;
 
 export async function logContext(userId: string): Promise<LogContext | null> {
@@ -47,10 +50,11 @@ export async function logContext(userId: string): Promise<LogContext | null> {
   // The circle almost never changes, so the saved one lets the entries read
   // start alongside the others.
   const groupGuess = savedMembership?.m?.group_id ?? null;
+  const wait = savedProfile && groupGuess && savedToday ? QUICK_MS : READ_MS;
   const [profileRes, membershipRes, guessedRecent] = await Promise.all([
-    withTimeout(fetchProfile(userId), READ_MS),
-    withTimeout(getMyMembership(supabase), READ_MS),
-    groupGuess ? withTimeout(fetchMyRecentEntries(groupGuess, userId), READ_MS) : null,
+    withTimeout(fetchProfile(userId), wait),
+    withTimeout(getMyMembership(supabase), wait),
+    groupGuess ? withTimeout(fetchMyRecentEntries(groupGuess, userId), wait) : null,
   ]);
 
   let fromCache = false;
