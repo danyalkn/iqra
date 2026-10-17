@@ -91,7 +91,8 @@ export default function ProfileScreen() {
     const userId = user?.id;
     if (userId) {
       await withTimeout(syncOutbox(userId), 5000);
-      const items = (await loadOutbox(userId)).filter((i) => !i.discard);
+      // Discards count too: their delete is still owed to the server.
+      const items = await loadOutbox(userId);
       const left = items.length;
       if (left > 0) {
         const one = left === 1;
