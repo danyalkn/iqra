@@ -15,9 +15,13 @@
 --  2. log_entries_backdate_guard: on insert, an entry that carries
 --     offline_logged_at is judged as if it had arrived at that time (still
 --     never older than the day before, and yesterday only until 03:00 then).
---     The time comes from the phone's clock and cannot be checked; it is
---     only refused when it is in the future. Updates are judged by now(), as
---     before (edits never move logged_at anyway).
+--     The time comes from the phone's clock and cannot be checked, so it
+--     only counts when it is plausible: not in the future (5 minutes of
+--     slack), at most 7 days old, and not before the entry's own logged_at
+--     (an entry is saved when it is logged, or later when backdated).
+--     Otherwise the entry is judged by now() as before, so a crafted
+--     offline time cannot backdate past that. Updates use now(), as before
+--     (edits never move logged_at anyway).
 --
 -- Additive only: the web PWA never sends the column and reads it as one
 -- more field of select *.
@@ -48,12 +52,11 @@ begin
     return new; -- an edit that keeps the date is always fine
   end if;
 
-  if tg_op = 'INSERT' and new.offline_logged_at is not null then
-    -- A few minutes of slack for a phone clock running ahead.
-    if new.offline_logged_at > now() + interval '5 minutes' then
-      raise exception 'That entry''s offline time is in the future.'
-        using errcode = 'check_violation';
-    end if;
+  if tg_op = 'INSERT'
+     and new.offline_logged_at is not null
+     and new.offline_logged_at <= now() + interval '5 minutes'
+     and new.offline_logged_at >= now() - interval '7 days'
+     and new.logged_at <= new.offline_logged_at + interval '5 minutes' then
     judged_at := new.offline_logged_at; -- as if it had arrived then
   end if;
 
