@@ -5,7 +5,7 @@ import { Type } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
 /**
- * One of the two personal stat tiles, same rhythm as the Streak / Logged
+ * A personal stat tile (Today's "This month"), same rhythm as the Streak / Logged
  * today cards in reference/web-pwa/app/(app)/today/TodayClient.tsx:
  * footnote label, title1 tabular number, footnote sub-line.
  */

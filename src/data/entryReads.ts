@@ -9,6 +9,7 @@
  * in src/lib/data.ts. Lives outside src/lib (imports the client).
  */
 
+import { getMyEntriesAllTime } from "@/lib/data";
 import type { DayReminder, LogRow } from "@/lib/types";
 import { supabase } from "@/supabase/client";
 
@@ -27,6 +28,20 @@ export async function fetchMyRecentEntries(
     .order("logged_at", { ascending: false });
   if (error) return { rows: null, error: true };
   return { rows: (data as LogRow[] | null) ?? [], error: false };
+}
+
+/** The member's whole history in the circle, newest first (Today's streak and
+ *  progress tiles). getMyEntriesAllTime throws on a failed request, which is
+ *  turned into the same { rows: null, error } shape as the reads above. */
+export async function fetchMyAllEntries(
+  groupId: string,
+  userId: string,
+): Promise<{ rows: LogRow[] | null; error: boolean }> {
+  try {
+    return { rows: await getMyEntriesAllTime(supabase, groupId, userId), error: false };
+  } catch {
+    return { rows: null, error: true };
+  }
 }
 
 export async function fetchMyDayReminders(
