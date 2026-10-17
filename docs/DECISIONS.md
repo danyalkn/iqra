@@ -57,6 +57,33 @@ When the code and this file disagree, this file wins; ask the owner.
   `pick_line()`), and skipped when already logged today.
 - Known and accepted: DST 1 to 3 AM reminders can double-fire or skip.
 
+## Revision plan (owner, 2026-10-17)
+
+Hifz members get a daily "what to revise" list on Today instead of guessing.
+Personal only (see "No showing off").
+
+- A **revision** of a juz is any Sabak Para or Dhor entry with that `juz`
+  (a partial juz, e.g. one hizb, counts as revising it).
+- **Current juz**: the juz of the latest Sabak entry. **Previous juz**: the
+  juz of the most recent Sabak in a different juz; failing that, current - 1
+  if the member has any hifz entry in it. **Older juz**: every other juz the
+  member has a Sabak, Sabak Para or Dhor entry in.
+- **Intervals** (owner's defaults; changeable later): current juz every
+  2 days (Sabak Para, "every other day"), previous juz every 3 days (Sabak
+  Para, "never 3 days without"), each older juz every 7 days (Dhor).
+  A juz is **due** when the days since its last revision (profile-local
+  dates) reach its interval; never revised means due.
+- **Today card** "Revise today" lists what is due, current first. Tapping a
+  row opens the log sheet for that type and juz. A row can be **hidden for
+  today** (comes back tomorrow if still due); a revision logged today
+  removes it.
+- **Evening nudge only if missed**: one local notification at 20:00 device
+  time listing what is still due and not hidden. Scheduled on the device a
+  week ahead and recomputed whenever Today loads or an entry changes, so a
+  revision cancels that evening's nudge. Only for members with notifications
+  on; cancelled on sign-out. No buttons (a one-tap log could pick the wrong
+  juz); the tap opens Today.
+
 ## Notifications (revised 2026-08-29)
 
 Push fires for:
