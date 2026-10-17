@@ -894,12 +894,6 @@ export default function StatsScreen() {
 
         {showBody && (
           <>
-            {/* All / Sabak / Sabak Para / Dhor - hifz, personal scope only.
-                Scopes the heatmap and weekly pages below. */}
-            {!reading && scope === "mine" && (
-              <SegmentedControl segments={FILTER_SEGMENTS} value={filter} onChange={setFilter} />
-            )}
-
             <View style={styles.scopeRow}>
               <Text style={[Type.footnote, { color: c.faint }]}>
                 {scope === "mine" ? "Your" : "Group"} activity
@@ -1022,6 +1016,15 @@ export default function StatsScreen() {
               <InsightsCard lines={mineLines} advice={personal.advice} />
             ) : (
               insights.length > 0 && <InsightsCard lines={insights} />
+            )}
+
+            {/* All / Sabak / Sabak Para / Dhor - hifz, personal scope only.
+                It scopes the heatmap and weekly pages, so it sits right above
+                them: at the top of the page (the web's spot) it was eight
+                cards away from anything it changed and read as broken (owner,
+                2026-10-17). */}
+            {!reading && scope === "mine" && (
+              <SegmentedControl segments={FILTER_SEGMENTS} value={filter} onChange={setFilter} />
             )}
 
             {/* Entries heatmap */}
