@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import type { ChatRead, Message, Reaction } from "@/lib/types";
+import { setChatVisible } from "@/push/chatVisibility";
 import { supabase } from "@/supabase/client";
 
 import { isTemp, parseTs } from "./shared";
@@ -446,11 +447,13 @@ export function useChatSync({
     const sub = AppState.addEventListener("change", (state) => {
       if (state !== "active") {
         active.current = false;
+        setChatVisible(false);
         // inactive -> background must not restart the clock.
         if (hiddenAt == null) hiddenAt = Date.now();
         return;
       }
       active.current = true;
+      setChatVisible(focused.current);
       const away = hiddenAt == null ? 0 : Date.now() - hiddenAt;
       hiddenAt = null;
       ensureLive.current(away > ZOMBIE_AFTER_MS);
@@ -474,6 +477,8 @@ export function useChatSync({
   useFocusEffect(
     useCallback(() => {
       focused.current = true;
+      // The push handler suppresses chat banners while the chat is on screen.
+      setChatVisible(active.current);
       if (firstFocus.current) {
         firstFocus.current = false;
       } else {
@@ -483,6 +488,7 @@ export function useChatSync({
       void markReadRef.current();
       return () => {
         focused.current = false;
+        setChatVisible(false);
       };
     }, [syncAll]),
   );
