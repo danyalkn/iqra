@@ -98,15 +98,20 @@ function emit(userId: string): void {
 }
 
 // Disk writes run one at a time, each writing memory as it is by then, so
-// the last write always holds the latest queue.
+// the last write always holds the latest queue. `extra` pairs go in the
+// same native call (multiSet), so they land with the queue or not at all.
 let writes: Promise<void> = Promise.resolve();
-function persist(userId: string): Promise<void> {
+function persist(userId: string, extra: [string, string][] = []): Promise<void> {
   writes = writes.then(async () => {
     try {
       const items = memory.get(userId);
       if (items == null) return;
-      if (items.length === 0) await AsyncStorage.removeItem(outboxKey(userId));
-      else await AsyncStorage.setItem(outboxKey(userId), JSON.stringify(items));
+      if (items.length === 0) {
+        await AsyncStorage.removeItem(outboxKey(userId));
+        if (extra.length) await AsyncStorage.multiSet(extra);
+      } else {
+        await AsyncStorage.multiSet([[outboxKey(userId), JSON.stringify(items)], ...extra]);
+      }
     } catch (e) {
       console.warn("Outbox write failed", e);
     }
@@ -114,17 +119,20 @@ function persist(userId: string): Promise<void> {
   return writes;
 }
 
-function set(userId: string, items: OutboxItem[]): Promise<void> {
+function set(userId: string, items: OutboxItem[], extra?: [string, string][]): Promise<void> {
   memory.set(userId, items);
   emit(userId);
-  return persist(userId);
+  return persist(userId, extra);
 }
 
-/** Queue a new entry (resolves once it is on disk). */
-export async function enqueue(item: OutboxItem): Promise<void> {
+/** Queue a new entry (resolves once it is on disk). `alsoWrite` is stored
+ *  in the same write: the notification path's "this tap is logged" mark,
+ *  which must never land without the entry (a tap lost for good) or the
+ *  entry without it (a replay logging it twice). */
+export async function enqueue(item: OutboxItem, alsoWrite?: [string, string][]): Promise<void> {
   const items = await loadOutbox(item.userId);
   if (items.some((i) => i.id === item.id)) return;
-  await set(item.userId, [...items, item]);
+  await set(item.userId, [...items, item], alsoWrite);
 }
 
 /** Wait for `id` to finish sending, then resume in a tick where it is

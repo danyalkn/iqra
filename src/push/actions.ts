@@ -16,7 +16,7 @@ import { pagesPhrase } from "@/lib/position";
 import type { NewEntry } from "@/lib/types";
 import { uuidv4 } from "@/lib/uuid";
 import { enqueue, loadOutbox } from "@/storage/outbox";
-import { PREF_KEYS, readPref, writePref } from "@/storage/prefs";
+import { PREF_KEYS, readPref } from "@/storage/prefs";
 import { readStoredSession } from "@/supabase/client";
 
 import { ACTION } from "./categories";
@@ -127,8 +127,9 @@ export function sheetHref(
 // The Android task and the foreground listener can both see one response,
 // the cold-start hook re-delivers the last one, and two quick taps on the
 // same notification start two task runs. Response keys already logged are
-// kept in a pref (capped); keys being written right now in a module Set,
-// checked before the first await so concurrent runs cannot both claim.
+// kept in a pref (capped), written together with the queued entry (which
+// also carries the key); keys being written right now in a module Set,
+// checked before the first await so concurrent runs cannot both write.
 
 const LOGGED_CAP = 20;
 const inFlight = new Set<string>();
@@ -147,18 +148,9 @@ export async function wasLogged(id: string): Promise<boolean> {
   return (await loggedIds()).includes(id);
 }
 
-/** Claim a response id before writing. False when another path already has. */
-async function claim(id: string): Promise<boolean> {
-  const ids = await loggedIds();
-  if (ids.includes(id)) return false;
-  ids.push(id);
-  await writePref(PREF_KEYS.pushLogged, JSON.stringify(ids.slice(-LOGGED_CAP)));
-  return true;
-}
-
-async function unclaim(id: string): Promise<void> {
-  const ids = await loggedIds();
-  await writePref(PREF_KEYS.pushLogged, JSON.stringify(ids.filter((x) => x !== id)));
+/** The pref value with `id` added (capped), to store with the entry. */
+function withLogged(ids: string[], id: string): string {
+  return JSON.stringify([...ids.filter((x) => x !== id), id].slice(-LOGGED_CAP));
 }
 
 // ── The write ──────────────────────────────────────────────────────────────
@@ -220,26 +212,26 @@ async function performLogClaimed(
   responseId: string,
   tappedAt: string,
 ): Promise<LogOutcome> {
-  if (!(await claim(responseId))) return "duplicate";
   const retryHref = sheetHref(action.type, action.amount, action.reminderId);
   let queued = false;
   try {
-    // Who is signed in, from the keychain: supabase-js reports no session
-    // offline once the access token has expired, and would first spend up
-    // to half a minute retrying the refresh.
-    const userId = (await readStoredSession())?.user.id;
-    if (!userId) {
-      await unclaim(responseId);
-      return "signedOut";
-    }
+    // iOS may suspend a background launch within a second of the tap (the
+    // response handler completes at once), and a suspended app can be
+    // killed. So the entry is built from the saved copies and queued before
+    // anything slow, and the "logged" mark for this tap is written in the
+    // same storage call: both or neither, never a mark without the entry.
+    // Who is signed in comes from the keychain: supabase-js reports no
+    // session offline once the access token has expired.
+    const [ids, stored] = await Promise.all([loggedIds(), readStoredSession()]);
+    if (ids.includes(responseId)) return "duplicate";
+    const userId = stored?.user.id;
+    if (!userId) return "signedOut";
     // A push addressed to another member (a row left behind on a shared
     // phone) must never write into this account.
-    if (action.uid && action.uid !== userId) {
-      await unclaim(responseId);
-      return "wrongUser";
-    }
-    const ctx = await logContext(userId);
+    if (action.uid && action.uid !== userId) return "wrongUser";
+    const ctx = await logContext(userId, { cacheFirst: true });
     if (!ctx) throw new Error("profile, circle or recent entries never loaded here");
+    if ((await loadOutbox(userId)).some((i) => i.sourceKey === responseId)) return "duplicate";
     const { profile, groupId, recent } = ctx;
     if (!TYPES_BY_MODE[profile.mode].includes(action.type)) {
       throw new Error(`type ${action.type} not offered in ${profile.mode} mode`);
@@ -256,8 +248,9 @@ async function performLogClaimed(
       savedAt: tappedAt,
       attempts: 0,
       state: "pending",
+      sourceKey: responseId,
     };
-    await enqueue(item);
+    await enqueue(item, [[PREF_KEYS.pushLogged, withLogged(ids, responseId)]]);
     queued = true;
     // Today and the revision nudges count it from here on, sent or not.
     markEntriesChanged();
@@ -292,7 +285,6 @@ async function performLogClaimed(
     // Queued means it is safe on the device and will sync: never invite a
     // second entry by calling that a failure.
     if (queued) return "logged";
-    await unclaim(responseId);
     await notify("Couldn’t log that. Tap to finish it in Iqra.", retryHref);
     return "failed";
   }

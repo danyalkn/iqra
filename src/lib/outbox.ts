@@ -47,6 +47,9 @@ export type OutboxItem = {
    *  may have landed with its reply lost, so the queue still owes the
    *  server a delete of this id. Hidden everywhere meanwhile. */
   discard?: boolean;
+  /** The notification response that queued it (src/push/actions.ts
+   *  responseKey), so a replay of that tap is known as already logged. */
+  sourceKey?: string;
 };
 
 /** A queued entry as a log row, for lists, the streak and "continue from". */

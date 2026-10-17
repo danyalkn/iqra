@@ -40,13 +40,34 @@ export type LogContext = {
 const QUICK_MS = 1500;
 const READ_MS = 4000;
 
-export async function logContext(userId: string): Promise<LogContext | null> {
+/**
+ * `cacheFirst`: with every saved copy present, answer from them alone and
+ * touch no network. For a notification button on iOS, where the app may be
+ * suspended within a second of the tap (seen on the simulator, 2026-10-17):
+ * the entry must be queued before anything slow. Today's saved copy follows
+ * every change on this phone, so only logs from another device since the
+ * last read are missed.
+ */
+export async function logContext(
+  userId: string,
+  opts: { cacheFirst?: boolean } = {},
+): Promise<LogContext | null> {
   const [savedProfile, savedMembership, savedToday, outbox] = await Promise.all([
     readCache("profile", userId),
     readCache("membership", userId),
     readCache("today", userId),
     loadOutbox(userId),
   ]);
+  const savedGroup = savedMembership?.m?.group_id ?? null;
+  if (opts.cacheFirst && savedProfile && savedGroup && savedToday) {
+    const mine = outbox.filter((i) => i.groupId === savedGroup);
+    return {
+      profile: savedProfile,
+      groupId: savedGroup,
+      recent: withPending(savedToday.entries, mine),
+      fromCache: true,
+    };
+  }
   // The circle almost never changes, so the saved one lets the entries read
   // start alongside the others.
   const groupGuess = savedMembership?.m?.group_id ?? null;
