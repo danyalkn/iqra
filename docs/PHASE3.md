@@ -54,8 +54,8 @@ scoped fixes; the main session owns the decisions.
    2026-10-16 from this machine after the owner ran `supabase login`: the
    Phase 3 migration is applied and recorded, `send-push` (v6) and
    `delete-account` (v1) are deployed with JWT verification on (both answer
-   401 unauthenticated). A stray June function with slug `smart-api` and
-   name `send-push` still exists in the project; nothing calls it.
+   401 unauthenticated). A stray June function (slug `smart-api`) that
+   nothing called was deleted at the same time.
 4. **Expo access token**: only needed if "enhanced push security" is
    switched on for the project on expo.dev (then `supabase secrets set
    EXPO_ACCESS_TOKEN=...`). Check the project's push settings; leave it off
@@ -295,11 +295,12 @@ once `delete-account` is deployed.
 
 ## Ship: first TestFlight and the Android APK
 
-1. Bump `expo.version` to the store version (owner decision, 1.0.0) in the
-   same commit as the native changes: with `runtimeVersion: appVersion`,
-   updates only reach builds with the same version string, so a native
-   change (expo-notifications plugin) must come with a new version or an
-   update could reach the old binary.
+1. ~~Bump `expo.version` to the store version~~ Done: 1.0.0 (owner
+   delegated the choice 2026-10-16), bumped before the first dev build that
+   carries expo-notifications. With `runtimeVersion: appVersion`, updates
+   only reach builds with the same version string, so every build from here
+   (dev, preview, production) is runtime 1.0.0 and no update can land on
+   the 0.1.0 binaries that lack the native modules.
 2. `npx eas-cli@latest build --profile production --platform ios` (store
    distribution; `autoIncrement` gives the build number; dev builds already
    consumed counter values, which is fine).
