@@ -13,6 +13,7 @@ import { Avatar, Button, Card, FieldLabel, Input, SegmentedControl, Sheet } from
 import { Type } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { ENTRY_META, TYPES_BY_MODE, type Mode } from "@/lib/entries";
+import { DEFAULT_MUSHAF, MUSHAF_OPTIONS } from "@/lib/mushaf";
 import { useSession } from "@/providers/SessionProvider";
 import { supabase } from "@/supabase/client";
 
@@ -22,8 +23,10 @@ const MODE_SEGMENTS: { value: Mode; label: string }[] = [
 ];
 
 /**
- * Ported from reference/web-pwa/components/ProfileSection.tsx. The row shows
- * the session profile; the sheet edits name, mode and time zone. The web
+ * Ported from reference/web-pwa/components/ProfileSection.tsx. The card shows
+ * the session profile (it is the identity card at the top of the Profile tab,
+ * which absorbed the old Settings screen, so it carries the avatar, mode and
+ * mushaf pills too); tapping it opens the sheet, which edits name, mode and time zone. The web
  * re-rendered the server page after saving (router.refresh); native awaits
  * refreshProfile() so the gate, headers and the log sheet see the new mode.
  *
@@ -39,6 +42,8 @@ export function ProfileSection() {
   const { user, profile, refreshProfile } = useSession();
 
   const displayName = profile?.display_name ?? "You";
+  const mushafId = profile?.mushaf ?? DEFAULT_MUSHAF;
+  const mushafLabel = MUSHAF_OPTIONS.find((o) => o.id === mushafId)?.label ?? mushafId;
   const currentMode: Mode = profile?.mode ?? "reading";
   const currentTz = profile?.timezone ?? detectTimezone();
 
@@ -96,21 +101,34 @@ export function ProfileSection() {
     <View>
       <Pressable accessibilityRole="button" accessibilityLabel="Edit profile" onPress={openSheet}>
         {({ pressed }) => (
-          <Card style={[styles.row, pressed && styles.pressed]}>
-            <Avatar name={displayName} src={profile?.avatar_url} size={48} />
-            <View style={styles.grow}>
-              <Text numberOfLines={1} style={[Type.callout, styles.semibold, { color: c.foreground }]}>
-                {displayName}
-              </Text>
-              <Text numberOfLines={1} style={[Type.footnote, { color: c.muted }]}>
-                {user?.email ?? ""}
-              </Text>
-              <Text numberOfLines={1} style={[Type.footnote, { color: c.faint }]}>
-                {currentMode === "hifz" ? "Memorizing (Hifz)" : "Reading"} ·{" "}
-                {TYPES_BY_MODE[currentMode].map((t) => ENTRY_META[t].label).join(" · ")}
-              </Text>
+          <Card style={pressed && styles.pressed}>
+            <View style={styles.identity}>
+              <Avatar name={displayName} src={profile?.avatar_url} size={72} />
+              <View style={styles.grow}>
+                <Text numberOfLines={1} style={[Type.title2, { color: c.foreground }]}>
+                  {displayName}
+                </Text>
+                {user?.email ? (
+                  <Text numberOfLines={1} style={[Type.footnote, { color: c.muted }]}>
+                    {user.email}
+                  </Text>
+                ) : null}
+              </View>
+              <Pencil size={16} color={c.faint} />
             </View>
-            <Pencil size={16} color={c.faint} />
+            <View style={styles.pills}>
+              <View style={[styles.pill, { backgroundColor: c.surface2 }]}>
+                <Text style={[Type.caption, { color: c.muted }]}>
+                  {currentMode === "hifz" ? "Memorizing (Hifz)" : "Reading"}
+                </Text>
+              </View>
+              <View style={[styles.pill, { backgroundColor: c.surface2 }]}>
+                <Text style={[Type.caption, { color: c.muted }]}>{mushafLabel}</Text>
+              </View>
+            </View>
+            <Text style={[Type.footnote, styles.types, { color: c.faint }]}>
+              {TYPES_BY_MODE[currentMode].map((t) => ENTRY_META[t].label).join(" · ")}
+            </Text>
           </Card>
         )}
       </Pressable>
@@ -201,7 +219,10 @@ export function ProfileSection() {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: 12 },
+  identity: { flexDirection: "row", alignItems: "center", gap: 16 },
+  pills: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  pill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  types: { marginTop: 8 },
   pressed: { opacity: 0.85 },
   grow: { flex: 1, minWidth: 0 },
   shrink: { flexShrink: 1 },

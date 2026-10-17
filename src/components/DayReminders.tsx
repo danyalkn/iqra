@@ -455,10 +455,10 @@ export function DayReminderSheet({
   };
 
   // The sheet is a Modal, so a route change underneath it would leave the
-  // sheet floating over Settings: close first, then navigate.
+  // sheet floating over the Profile tab: close first, then navigate.
   const goToSettings = () => {
     onClose();
-    router.push("/settings");
+    router.push("/profile?section=notifications");
   };
 
   return (

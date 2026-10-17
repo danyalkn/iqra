@@ -1,42 +1,78 @@
-import { router, useFocusEffect } from "expo-router";
-import { NotebookPen, Settings as SettingsIcon } from "lucide-react-native";
-import { useCallback, useMemo, useState } from "react";
+import Constants from "expo-constants";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { LogOut, NotebookPen } from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import {
   Platform,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  type LayoutChangeEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { NavRow } from "@/components/profile/NavRow";
 import { StatCard } from "@/components/profile/StatCard";
 import { WhereYouAre } from "@/components/profile/WhereYouAre";
-import { Avatar, Card } from "@/components/ui";
+import { CelebrateToggle } from "@/components/settings/CelebrateToggle";
+import { DeleteAccount } from "@/components/settings/DeleteAccount";
+import { MushafSelect } from "@/components/settings/MushafSelect";
+import { NotificationsToggle } from "@/components/settings/NotificationsToggle";
+import { ProfileSection } from "@/components/settings/ProfileSection";
+import { RemindersManager } from "@/components/settings/RemindersManager";
+import { Button, Card, SegmentedControl } from "@/components/ui";
 import { Type } from "@/constants/theme";
 import { useMembership } from "@/hooks/use-membership";
 import { useNow } from "@/hooks/use-now";
 import { useTheme } from "@/hooks/use-theme";
 import { getMyEntriesAllTime } from "@/lib/data";
 import { currentStreak, localDate, longestStreak, monthKey } from "@/lib/dates";
-import { ENTRY_META, TYPES_BY_MODE } from "@/lib/entries";
-import { DEFAULT_MUSHAF, MUSHAF_OPTIONS } from "@/lib/mushaf";
+import { DEFAULT_MUSHAF } from "@/lib/mushaf";
 import { hifzProgress, readingProgress } from "@/lib/progress";
 import type { LogRow } from "@/lib/types";
 import { useSession } from "@/providers/SessionProvider";
+import { useThemeContext, type ThemePreference } from "@/providers/ThemeProvider";
 import { supabase } from "@/supabase/client";
+
+/** The web footer showed the git BUILD; native shows the app version from
+ *  app.json (Constants.expoConfig is null in some bare contexts, hence "dev"). */
+const VERSION = Constants.expoConfig?.version ?? "dev";
+
+/** Gap kept above a section when a /profile?section=... link scrolls to it. */
+const SECTION_SCROLL_MARGIN = 16;
+
+type SettingsSection = "settings" | "notifications" | "reminders";
+
+/** A search param as one string. Expo Router can hand back an array for a
+ *  repeated key, and a param cleared with setParams may come back as "". */
+function oneParam(v: string | string[] | undefined): string | null {
+  const s = Array.isArray(v) ? v[0] : v;
+  return s ? s : null;
+}
+
+function asSection(v: string | null): SettingsSection | null {
+  return v === "settings" || v === "notifications" || v === "reminders" ? v : null;
+}
 
 const LOAD_ERROR = "Couldn’t load your entries. Pull down to try again.";
 
 /**
  * Fifth tab (owner decision 2026-10-16: Profile replaces Journal in the tab
- * bar). New on native, no web page to port: the identity row comes from
+ * bar). New on native, no web page to port: the identity card comes from
  * reference/web-pwa/components/ProfileSection.tsx and the stat tiles from
  * the Today page. Personal data only, per DECISIONS "No showing off": no
  * comparisons with other members and no leaderboard here.
+ *
+ * Owner decision 2026-10-17: the separate Settings screen is gone and every
+ * setting lives below the profile content under a "Settings" heading, in the
+ * web settings page's order (mushaf, appearance, notifications, celebration,
+ * daily reminders, then sign out / delete account and the build line). The
+ * identity card is the ProfileSection row, so tapping it edits name, mode and
+ * time zone; there is no second profile row in the settings block.
+ * /profile?section=settings|notifications|reminders scrolls to that block
+ * (Today's gear, the "Turn them on in Settings" link in DayReminders).
  *
  * Insets: the tab screen gets no automatic top inset on either platform (on
  * iOS 26 react-native-screens does not inset the scroll view for the status
@@ -52,13 +88,14 @@ const LOAD_ERROR = "Couldn’t load your entries. Pull down to try again.";
 export default function ProfileScreen() {
   const c = useTheme();
   const insets = useSafeAreaInsets();
-  const { profile, user } = useSession();
+  const { profile, user, signOut } = useSession();
   const { membership } = useMembership();
+  const { preference, setPreference } = useThemeContext();
+  const [signingOut, setSigningOut] = useState(false);
 
   const tz = profile?.timezone ?? "UTC";
   const mode = profile?.mode ?? "reading";
   const mushaf = profile?.mushaf ?? DEFAULT_MUSHAF;
-  const displayName = profile?.display_name ?? "You";
   const groupId = membership?.group_id ?? null;
   const userId = user?.id ?? null;
 
@@ -141,13 +178,60 @@ export default function ProfileScreen() {
     return { reading, hifz, lastSabak };
   }, [rows, tz, mushaf]);
 
-  const mushafLabel = MUSHAF_OPTIONS.find((o) => o.id === mushaf)?.label ?? mushaf;
-  const typesLine = TYPES_BY_MODE[mode].map((t) => ENTRY_META[t].label).join(" · ");
+  // ── Scroll to a settings section ──────────────────────────────────────────
+  // Positions come from onLayout: the settings block's y inside the scroll
+  // content, plus each linked section's y inside the block. The block always
+  // renders, so there is no stale-position case. Unlike Stats, the ScrollView
+  // here sits below the root View's top padding (see Insets above), so
+  // content offset 0 is already clear of the status bar and no top inset is
+  // subtracted from the target. The scroll waits for the entries load to settle, because the
+  // stat tiles and WhereYouAre appear above the block and would push it down
+  // after the scroll. The link is consumed once, so a re-focus never scrolls.
+  const params = useLocalSearchParams<{ section?: string }>();
+  const wantSection = asSection(oneParam(params.section));
+  const [blockY, setBlockY] = useState<number | null>(null);
+  const [sectionY, setSectionY] = useState<{ notifications?: number; reminders?: number }>({});
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const onBlockLayout = useCallback((e: LayoutChangeEvent) => {
+    setBlockY(e.nativeEvent.layout.y);
+  }, []);
+  const onNotificationsLayout = useCallback((e: LayoutChangeEvent) => {
+    const y = e.nativeEvent.layout.y;
+    setSectionY((p) => (p.notifications === y ? p : { ...p, notifications: y }));
+  }, []);
+  const onRemindersLayout = useCallback((e: LayoutChangeEvent) => {
+    const y = e.nativeEvent.layout.y;
+    setSectionY((p) => (p.reminders === y ? p : { ...p, reminders: y }));
+  }, []);
+  const settled = membership === null || rows !== null || error !== null;
+  const targetY =
+    wantSection && blockY != null && settled
+      ? wantSection === "settings"
+        ? blockY
+        : sectionY[wantSection] != null
+          ? blockY + (sectionY[wantSection] ?? 0)
+          : null
+      : null;
+  useEffect(() => {
+    if (targetY == null) return;
+    // After paint, so layout is settled before we scroll.
+    const id = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, targetY - SECTION_SCROLL_MARGIN),
+        animated: true,
+      });
+      // setParams merges and an undefined value reads back as absent.
+      router.setParams({ section: undefined });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [targetY]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: c.canvas }]}>
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           paddingBottom: Platform.OS === "ios" ? 40 + insets.bottom : 40,
         }}
@@ -159,45 +243,12 @@ export default function ProfileScreen() {
       >
         <View style={styles.header}>
           <Text style={[Type.display, { color: c.foreground }]}>Profile</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Settings"
-            onPress={() => router.push("/settings")}
-            hitSlop={8}
-            style={[styles.gear, { backgroundColor: c.surface2 }]}
-          >
-            <SettingsIcon size={20} color={c.muted} />
-          </Pressable>
         </View>
 
         <View style={styles.body}>
-          {/* Identity: who is signed in, how they study, which mushaf. */}
-          <Card>
-            <View style={styles.identity}>
-              <Avatar name={displayName} src={profile?.avatar_url} size={72} />
-              <View style={styles.identityText}>
-                <Text style={[Type.title2, { color: c.foreground }]} numberOfLines={1}>
-                  {displayName}
-                </Text>
-                {user?.email ? (
-                  <Text style={[Type.footnote, { color: c.muted }]} numberOfLines={1}>
-                    {user.email}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-            <View style={styles.pills}>
-              <View style={[styles.pill, { backgroundColor: c.surface2 }]}>
-                <Text style={[Type.caption, { color: c.muted }]}>
-                  {mode === "hifz" ? "Memorizing (Hifz)" : "Reading"}
-                </Text>
-              </View>
-              <View style={[styles.pill, { backgroundColor: c.surface2 }]}>
-                <Text style={[Type.caption, { color: c.muted }]}>{mushafLabel}</Text>
-              </View>
-            </View>
-            <Text style={[Type.footnote, styles.types, { color: c.faint }]}>{typesLine}</Text>
-          </Card>
+          {/* Identity: who is signed in, how they study, which mushaf. Tapping
+              it opens the edit sheet (name, mode, time zone). */}
+          <ProfileSection />
 
           {membership === null ? (
             <Text style={[Type.footnote, styles.note, { color: c.muted }]}>
@@ -244,15 +295,67 @@ export default function ProfileScreen() {
               note="Everything you’ve logged, with your notes"
               onPress={() => router.push("/journal")}
             />
-            <NavRow
-              icon={SettingsIcon}
-              iconColor={c.muted}
-              iconBackground={c.surface2}
-              title="Settings"
-              note="Profile, mushaf, reminders, appearance"
-              onPress={() => router.push("/settings")}
-            />
           </Card>
+        </View>
+
+        <View style={styles.settings} onLayout={onBlockLayout}>
+          <Text accessibilityRole="header" style={[Type.title2, { color: c.foreground }]}>
+            Settings
+          </Text>
+
+          <View style={styles.sections}>
+            <MushafSelect />
+
+            {/* Web: components/ThemeToggle.tsx. The preference lives in
+                ThemeProvider (same "iqra:theme" key) instead of the <html>
+                dataset, and the status bar follows the resolved scheme. */}
+            <Card>
+              <Text style={[Type.callout, styles.cardTitle, { color: c.foreground }]}>
+                Appearance
+              </Text>
+              <SegmentedControl<ThemePreference>
+                segments={[
+                  { value: "system", label: "System" },
+                  { value: "light", label: "Light" },
+                  { value: "dark", label: "Dark" },
+                ]}
+                value={preference}
+                onChange={setPreference}
+              />
+            </Card>
+
+            <View onLayout={onNotificationsLayout}>
+              <NotificationsToggle />
+            </View>
+
+            <CelebrateToggle />
+
+            <View onLayout={onRemindersLayout}>{user && <RemindersManager userId={user.id} />}</View>
+
+            <View style={styles.actions}>
+              {/* Web: components/SignOutButton.tsx. The gate flips to login on
+                  SIGNED_OUT, so no navigation here. */}
+              <Button
+                variant="secondary"
+                fullWidth
+                loading={signingOut}
+                onPress={() => {
+                  setSigningOut(true);
+                  void signOut();
+                }}
+              >
+                <LogOut size={16} color={c.foreground} />
+                <Text style={[Type.callout, styles.signOutLabel, { color: c.foreground }]}>
+                  Sign out
+                </Text>
+              </Button>
+              <DeleteAccount />
+            </View>
+
+            <Text style={[Type.caption, styles.build, { color: c.faint }]}>
+              Iqra · build {VERSION}
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -265,19 +368,18 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingTop: 28,
     paddingBottom: 12,
   },
-  gear: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   body: { paddingHorizontal: 20, gap: 12 },
-  identity: { flexDirection: "row", alignItems: "center", gap: 16 },
-  identityText: { flex: 1, minWidth: 0, gap: 2 },
-  pills: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  pill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  types: { marginTop: 8 },
   note: { paddingHorizontal: 4 },
   statRow: { flexDirection: "row", gap: 12 },
   rows: { padding: 0, overflow: "hidden" },
+  settings: { paddingHorizontal: 20, marginTop: 32 },
+  sections: { gap: 24, paddingTop: 12 },
+  cardTitle: { fontWeight: "600", marginBottom: 12 },
+  actions: { paddingTop: 8, gap: 4 },
+  signOutLabel: { fontWeight: "600" },
+  build: { textAlign: "center", paddingTop: 8 },
 });

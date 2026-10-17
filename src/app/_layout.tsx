@@ -27,7 +27,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
  * Gate (ported from reference/web-pwa/app/page.tsx and (app)/layout.tsx):
  *   no session            -> (auth)/login
  *   session, no profile   -> onboarding (name + mode missing)
- *   session + onboarded   -> (tabs), settings, journal
+ *   session + onboarded   -> (tabs), journal
  * `index` is never guarded: it is the anchor every guarded route falls
  * back to, and it redirects once the session is known. Without that, a
  * cold start at `/` resolved while every guard was still false and the
@@ -98,8 +98,7 @@ function RootNavigator() {
         <Stack.Screen name="index" />
         <Stack.Protected guard={!loading && signedIn && isOnboarded}>
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="settings" options={{ presentation: "card" }} />
-          <Stack.Screen name="journal" options={{ presentation: "card" }} />
+            <Stack.Screen name="journal" options={{ presentation: "card" }} />
         </Stack.Protected>
         <Stack.Protected guard={!loading && signedIn && !isOnboarded}>
           <Stack.Screen name="onboarding" />

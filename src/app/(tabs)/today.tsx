@@ -315,7 +315,7 @@ export default function TodayScreen() {
     }
   }, [loadToday]);
 
-  // Confetti-on-reading preference (device-local; toggled in Settings).
+  // Confetti-on-reading preference (device-local; toggled in Settings on the Profile tab).
   const [celebrateTick, setCelebrateTick] = useState(0);
   const celebrateOn = useRef(true);
   const celebrateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -578,11 +578,11 @@ export default function TodayScreen() {
                 <NotebookPen size={20} color={c.muted} />
               </Pressable>
               {/* The web linked Settings through the avatar; native keeps a
-                  gear so the Profile tab owns the avatar. */}
+                  gear that jumps to the Settings block on the Profile tab. */}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Settings"
-                onPress={() => router.push("/settings")}
+                onPress={() => router.push("/profile?section=settings")}
                 hitSlop={8}
                 style={[styles.headerButton, { backgroundColor: c.surface2 }]}
               >
