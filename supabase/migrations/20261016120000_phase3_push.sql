@@ -1,7 +1,7 @@
 -- ════════════════════════════════════════════════════════════════════════
 -- Iqra - Phase 3 push (docs/PHASE3.md "Phase 3 migration")
 --
--- Two things, nothing the web PWA reads changes:
+-- Three things, nothing the web PWA reads changes:
 --
 --   1. send_push(uuid[], jsonb) was never revoked from clients, so any
 --      signed-in member could call it over PostgREST's /rpc and push to the
@@ -299,6 +299,37 @@ begin
   end loop;
 end;
 $$;
+
+-- ── 3. One Expo token belongs to one member ─────────────────────────────────
+-- A phone has one Expo push token however many accounts sign in on it. The
+-- app deletes its row before signing out, but a dead network or a session
+-- that expired on its own can leave the previous member's row behind, and
+-- then a reminder meant for them would reach the phone with the new member
+-- signed in (the app also refuses to act on a push whose `uid` is not the
+-- signed-in member). Server side: when a member registers a token, any other
+-- member's row with that same token goes. Security definer because RLS lets
+-- a member delete only their own rows. Web rows have no `expo` key and are
+-- untouched.
+create or replace function public.push_subscriptions_claim_token()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.subscription ? 'expo' then
+    delete from push_subscriptions ps
+    where ps.user_id <> new.user_id
+      and ps.subscription->>'expo' = new.subscription->>'expo';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists push_subscriptions_claim_token on public.push_subscriptions;
+create trigger push_subscriptions_claim_token
+  before insert on public.push_subscriptions
+  for each row execute function public.push_subscriptions_claim_token();
 
 -- The cron schedules are untouched: pg_cron calls these by name, so the new
 -- bodies take effect on the next tick. cron_streak_grace_nudge and

@@ -108,6 +108,7 @@ function isAuthorized(header: string | null): boolean {
 
 type SubRow = {
   id: string;
+  user_id: string;
   subscription: { endpoint?: unknown; expo?: unknown };
 };
 type SendError = { host: string; status: number | null; message: string };
@@ -211,7 +212,7 @@ Deno.serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
   const { data: subs } = await supabase
     .from("push_subscriptions")
-    .select("id, subscription")
+    .select("id, user_id, subscription")
     .in("user_id", userIds);
 
   let sent = 0;
@@ -221,10 +222,10 @@ Deno.serve(async (req) => {
   // Partition: web rows keep the path the PWA has always used; expo rows go
   // to Expo's service; anything else is logged and skipped.
   const webRows: SubRow[] = [];
-  const expoRows: { id: string; token: string }[] = [];
+  const expoRows: { id: string; userId: string; token: string }[] = [];
   for (const row of (subs ?? []) as SubRow[]) {
     if (isExpoToken(row.subscription?.expo)) {
-      expoRows.push({ id: row.id, token: row.subscription.expo });
+      expoRows.push({ id: row.id, userId: row.user_id, token: row.subscription.expo });
     } else if (row.subscription && "endpoint" in row.subscription) {
       webRows.push(row);
     } else {
@@ -285,11 +286,20 @@ Deno.serve(async (req) => {
   // `collapseId` replaces a displayed notification, on Android `tag` does
   // (there `collapseId` only coalesces in transit). `categoryId` turns a
   // reminder into one with log buttons. Whole message capped at 4 KiB.
-  const message = (to: string): Record<string, unknown> => ({
+  // `uid` names the recipient so a row left behind on a shared phone can
+  // never log into another member's account; `sendId` is unique per
+  // delivered push (the OS reuses the request identifier across pushes with
+  // one collapse id / tag), so the app can dedupe taps safely.
+  const message = (to: string, userId: string): Record<string, unknown> => ({
     to,
     title: payload.title,
     body: payload.body,
-    data: { url: payload.url ?? "/today", ...(payload.tag ? { tag: payload.tag } : {}) },
+    data: {
+      url: payload.url ?? "/today",
+      uid: userId,
+      sendId: crypto.randomUUID(),
+      ...(payload.tag ? { tag: payload.tag } : {}),
+    },
     sound: "default",
     channelId: EXPO_CHANNEL,
     priority: "high",
@@ -299,7 +309,7 @@ Deno.serve(async (req) => {
 
   for (let i = 0; i < expoRows.length; i += EXPO_BATCH) {
     const batch = expoRows.slice(i, i + EXPO_BATCH);
-    const tickets = await postExpo(batch.map((r) => message(r.token)), errors);
+    const tickets = await postExpo(batch.map((r) => message(r.token, r.userId)), errors);
     if (!tickets) continue;
     // Tickets come back in message order.
     for (let j = 0; j < batch.length; j++) {
