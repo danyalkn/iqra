@@ -27,8 +27,6 @@ import { DayReminders, type DayRemindersHandle } from "@/components/DayReminders
 import { EmptyState } from "@/components/EmptyState";
 import { EntryRow } from "@/components/EntryRow";
 import { LogSheet } from "@/components/LogSheet";
-import { StatCard } from "@/components/profile/StatCard";
-import { WhereYouAre } from "@/components/profile/WhereYouAre";
 import { SpeedDial } from "@/components/SpeedDial";
 import { Card, SegmentedControl, type Segment } from "@/components/ui";
 import { CLOSE_MS as SHEET_CLOSE } from "@/components/ui/Sheet";
@@ -40,7 +38,7 @@ import {
   takeEntriesChanged,
   updateEntry,
 } from "@/data/entryWrites";
-import { fetchMyAllEntries, fetchMyDayReminders } from "@/data/entryReads";
+import { fetchMyDayReminders, fetchMyRecentEntries } from "@/data/entryReads";
 import { useMembership } from "@/hooks/use-membership";
 import { useNow } from "@/hooks/use-now";
 import { useTheme } from "@/hooks/use-theme";
@@ -49,7 +47,6 @@ import {
   hijriDate,
   localDate,
   longestStreak,
-  monthKey,
   todayLocal,
   tomorrowLocal,
 } from "@/lib/dates";
@@ -70,7 +67,6 @@ import {
   totalPages,
   type MushafId,
 } from "@/lib/mushaf";
-import { hifzProgress, readingProgress } from "@/lib/progress";
 import type { DayReminder, LogRow, NewEntry } from "@/lib/types";
 import { useSession } from "@/providers/SessionProvider";
 import { PREF_KEYS, readPref } from "@/storage/prefs";
@@ -263,11 +259,7 @@ export default function TodayScreen() {
   const loadSeq = useRef(0);
 
   // The web page did this on the server: recent entries and today's +
-  // tomorrow's one-time reminders in one go, once the circle is known. Native
-  // reads the member's whole history instead of the web's 120-day window,
-  // because the streak, "This month" and "Where you are" below need it (the
-  // longest streak, khatm count and total new memorization are all-time) and
-  // one fetch then feeds all of them. Here
+  // tomorrow's one-time reminders in one go, once the circle is known. Here
   // it is also the retry for every surface below (focus, pull-to-refresh,
   // foreground return), so a failed first fetch does not stick for the
   // session: the shared helpers never reject, so the error must be read.
@@ -275,7 +267,7 @@ export default function TodayScreen() {
     if (!groupId || !userId) return Promise.resolve();
     const seq = ++loadSeq.current;
     return Promise.all([
-      fetchMyAllEntries(groupId, userId),
+      fetchMyRecentEntries(groupId, userId),
       fetchMyDayReminders(userId, todayLocal(tz), tomorrowLocal(tz)),
     ]).then(([recent, reminders]) => {
       if (seq !== loadSeq.current) return;
@@ -363,22 +355,6 @@ export default function TodayScreen() {
   );
   const streak = currentStreak(loggedDays, tz, now);
   const longest = longestStreak(loggedDays);
-  // "This month" is the real calendar month (1st to today), not a rolling 30
-  // days: distinct logged days whose key matches the current month.
-  const month = monthKey(today);
-  let monthDays = 0;
-  for (const day of loggedDays) if (day.startsWith(month)) monthDays++;
-  const dayOfMonth = +today.slice(8, 10);
-
-  const progress = useMemo(() => {
-    const reading = readingProgress(entries, tz);
-    const hifz = hifzProgress(entries, tz, mushaf);
-    // hifzProgress returns the very row object it was handed (filter and sort
-    // do not copy), so an identity lookup recovers the full LogRow for
-    // describeEntry without a cast.
-    const lastSabak = hifz ? (entries.find((r) => r === hifz.latest) ?? null) : null;
-    return { reading, hifz, lastSabak };
-  }, [entries, tz, mushaf]);
 
   const todayEntries = useMemo(
     () => entries.filter((e) => localDate(e.logged_at, tz) === today),
@@ -728,29 +704,6 @@ export default function TodayScreen() {
                 </>
               )}
             </View>
-
-            {/* Personal numbers, below the day's log because logging is this
-                screen's job. Derived from the same `entries` as the Streak
-                tile above, so a log, edit or delete moves them at once.
-                Personal only (DECISIONS "No showing off"). */}
-            {groupId && !loadFailed && (
-              <View style={styles.progress}>
-                <Text style={[Type.caption, styles.upper, styles.sectionLabel, { color: c.faint }]}>
-                  Your progress
-                </Text>
-                <StatCard
-                  label="This month"
-                  value={monthDays}
-                  sub={`of ${dayOfMonth} ${dayOfMonth === 1 ? "day" : "days"} so far`}
-                />
-                <WhereYouAre
-                  mode={mode}
-                  reading={progress.reading}
-                  hifz={progress.hifz}
-                  lastSabak={progress.lastSabak}
-                />
-              </View>
-            )}
           </>
         )}
       </ScrollView>
@@ -828,7 +781,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   entries: { marginTop: 16, paddingHorizontal: 20, gap: 10 },
-  progress: { marginTop: 24, paddingHorizontal: 20, gap: 10 },
   sectionLabel: { paddingHorizontal: 4 },
   noneLabel: { paddingHorizontal: 4, paddingTop: 8 },
 });
