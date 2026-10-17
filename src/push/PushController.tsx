@@ -4,7 +4,13 @@ import { useEffect, useRef } from "react";
 import { AppState, Platform } from "react-native";
 
 import { useSession } from "@/providers/SessionProvider";
-import { parseResponse, responseKey, sheetHref, wasLogged } from "@/push/actions";
+import {
+  logInBackground,
+  parseResponse,
+  responseKey,
+  sheetHref,
+  wasLogged,
+} from "@/push/actions";
 import { registerCategories } from "@/push/categories";
 import { isChatVisible } from "@/push/chatVisibility";
 import { syncPush } from "@/push/register";
@@ -29,11 +35,13 @@ import { registerNotificationTask } from "@/push/task";
  *    response is deduped by its per-push key (see responseKey: the request
  *    identifier alone repeats across pushes with one collapse id / tag).
  *  - action buttons on reminders (logReading / logHifz categories): a tap
- *    in the foreground, and every tap on iOS, opens the log sheet prefilled
- *    with the type and amount (`/today?log=<type>&amount=<n>`). Android
- *    taps with the app in the background are written headless by the task
- *    in src/push/task.ts; this component ignores those (and any response
- *    the task already logged) so nothing is written twice.
+ *    while the app is on screen opens the log sheet prefilled with the type
+ *    and amount (`/today?log=<type>&amount=<n>`). A tap with the app in the
+ *    background or killed is written headless: on Android by the task in
+ *    src/push/task.ts (this component stays out of its way), on iOS here,
+ *    because the actions do not open the app and the system wakes or
+ *    launches it in the background with the response (categories.ts).
+ *    Responses already logged are never replayed into the sheet.
  *  - the launch / sign-in self-heal: re-register this device's token for a
  *    member who turned push on here (the web's syncPushSubscription).
  *
@@ -126,14 +134,21 @@ export function PushController() {
       if (parsed.href) queue(parsed.href);
       return;
     }
+    // A log button (or "Other amount" with text that is not a number).
+    // Not "active" includes Notification Center pulled over the open app
+    // ("inactive"): the button then logs as it would from the lock screen.
+    if (AppState.currentState !== "active") {
+      // Android: the task owns the write and this listener may still fire
+      // alongside it; stay out of its way. iOS: nobody else will, and the
+      // app is not on screen to show a sheet, so write it here.
+      if (Platform.OS === "ios") void logInBackground(response, parsed);
+      return;
+    }
     if (parsed.kind === "invalidAmount") {
       queue(sheetHref(parsed.type, null, parsed.reminderId));
       return;
     }
-    // A log button. Android in the background: the task owns the write and
-    // this listener may still fire alongside it; stay out of its way.
-    if (Platform.OS === "android" && AppState.currentState !== "active") return;
-    // Already written by the task (a cold start replaying that response).
+    // Already written headless (a cold start replaying that response).
     void wasLogged(key).then((done) => {
       if (!done) queue(sheetHref(parsed.type, parsed.amount, parsed.reminderId));
     });
@@ -162,9 +177,22 @@ export function PushController() {
     prevUser.current = userId;
   }, [userId]);
 
-  // Launch and sign-in self-heal (token rotation, pruned rows).
+  // Launch and sign-in self-heal (token rotation, pruned rows). A
+  // background launch (an iOS action tap) has seconds before suspension
+  // and spends them on the entry; the self-heal waits for the app to open.
   useEffect(() => {
-    if (userId) void syncPush(userId);
+    if (!userId) return;
+    if (AppState.currentState === "active") {
+      void syncPush(userId);
+      return;
+    }
+    let done = false;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active" || done) return;
+      done = true;
+      void syncPush(userId);
+    });
+    return () => sub.remove();
   }, [userId]);
 
   return null;

@@ -1,5 +1,4 @@
 import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
 
 /**
  * Interactive notification categories (docs/PHASE3.md "Interactive
@@ -11,11 +10,14 @@ import { Platform } from "react-native";
  * not promise persistence), from the same module scope that sets the
  * notification handler.
  *
- * Platform split, decided in PHASE3.md: Android runs a background task for
- * an action tap, so its buttons do not open the app and the entry is written
- * headless. iOS has no documented headless path for an action, so every iOS
- * action opens the app straight into the log sheet prefilled with the type
- * and amount, where Save is the only tap left.
+ * No action opens the app, on either platform: the point of the buttons
+ * is logging without opening Iqra. Android runs the background task in
+ * src/push/task.ts. On iOS an action without the foreground option makes
+ * the system wake or launch the app in the background and deliver the
+ * response, which PushController writes headless (PHASE4.md option A;
+ * options B and C there are the fallbacks if the phone loses writes).
+ * Either way the only feedback is a local confirmation. A tap
+ * while the app is on screen still opens the prefilled sheet.
  */
 
 export const CATEGORY = {
@@ -32,7 +34,8 @@ export const ACTION = {
   dhor: "dhor",
 } as const;
 
-const opensApp = Platform.OS === "ios";
+/** Shared by every action: see the header. */
+const inBackground = { opensAppToForeground: false };
 
 export async function registerCategories(): Promise<void> {
   try {
@@ -40,30 +43,30 @@ export async function registerCategories(): Promise<void> {
       {
         identifier: ACTION.pages1,
         buttonTitle: "Log 1 page",
-        options: { opensAppToForeground: opensApp },
+        options: inBackground,
       },
       {
         identifier: ACTION.pages5,
         buttonTitle: "Log 5 pages",
-        options: { opensAppToForeground: opensApp },
+        options: inBackground,
       },
       {
         identifier: ACTION.pagesOther,
         buttonTitle: "Other amount",
         textInput: { placeholder: "Pages", submitButtonTitle: "Log" },
-        options: { opensAppToForeground: opensApp },
+        options: inBackground,
       },
     ]);
     // Android shows at most three buttons; these are the three hifz types.
     // Dismissing the notification is "not today".
     await Notifications.setNotificationCategoryAsync(CATEGORY.hifz, [
-      { identifier: ACTION.sabak, buttonTitle: "Sabak", options: { opensAppToForeground: opensApp } },
+      { identifier: ACTION.sabak, buttonTitle: "Sabak", options: inBackground },
       {
         identifier: ACTION.sabakPara,
         buttonTitle: "Sabak Para",
-        options: { opensAppToForeground: opensApp },
+        options: inBackground,
       },
-      { identifier: ACTION.dhor, buttonTitle: "Dhor", options: { opensAppToForeground: opensApp } },
+      { identifier: ACTION.dhor, buttonTitle: "Dhor", options: inBackground },
     ]);
   } catch (e) {
     console.warn("Notification categories failed to register", e);
