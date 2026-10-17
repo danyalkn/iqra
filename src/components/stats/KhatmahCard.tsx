@@ -197,7 +197,6 @@ function KhatmahHistory({
   const c = useTheme();
   const finished = segments.filter((s) => s.endDate != null);
   const fastest = finished.length > 1 ? Math.min(...finished.map((s) => s.days)) : null;
-  const maxDays = Math.max(1, ...segments.map((s) => s.days));
   const newestFirst = [...segments].reverse();
 
   return (
@@ -234,14 +233,20 @@ function KhatmahHistory({
                   ? `Since ${dateLabel(s.startDate, today)} · ${fmt1(s.pages)} of ${KHATMAH_PAGES} pages`
                   : `${dateLabel(s.startDate, today)} to ${dateLabel(s.endDate ?? s.startDate, today)} · ${fmt1(perDay)} pages a day`}
               </Text>
+              {/* The bar is completion, not duration: a finished khatmah is
+                  full and the open one fills to its share of the 604 pages.
+                  Sized by days, the fastest khatmah drew the shortest bar
+                  and read as unfinished (owner, 2026-10-17); speed is in the
+                  day count, the pace line and the Fastest pill instead. */}
               <View style={[styles.bar, { backgroundColor: c.surface2 }]}>
                 <View
                   style={[
                     styles.barFill,
                     {
                       backgroundColor: c.accent,
-                      opacity: open ? 0.5 : 1,
-                      width: `${Math.max(2, (s.days / maxDays) * 100)}%`,
+                      width: open
+                        ? `${Math.max(2, Math.min(100, (s.pages / KHATMAH_PAGES) * 100))}%`
+                        : "100%",
                     },
                   ]}
                 />
@@ -252,7 +257,7 @@ function KhatmahHistory({
       </View>
 
       <Text style={[Type.caption, styles.mt5, { color: c.faint }]}>
-        Bars compare how many days each one took. Measured on the 604-page Uthmani mushaf.
+        Bars show how much of each khatmah is done. Measured on the 604-page Uthmani mushaf.
       </Text>
 
       <Button fullWidth style={styles.mt5} onPress={onClose}>
