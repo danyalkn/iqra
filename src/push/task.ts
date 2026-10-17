@@ -2,7 +2,7 @@ import * as Notifications from "expo-notifications";
 import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 
-import { parseResponse, performLog } from "./actions";
+import { notify, parseResponse, performLog, responseKey, sheetHref } from "./actions";
 
 /**
  * Android background task for notification actions (docs/PHASE3.md
@@ -29,17 +29,36 @@ TaskManager.defineTask<Notifications.NotificationTaskPayload>(
     }
     const response = data;
     const parsed = parseResponse(response);
-    // Taps and invalid amounts open the app; PushController routes them.
-    if (parsed.kind !== "log") return Notifications.BackgroundNotificationTaskResult.NoData;
+    // A body tap opens the app; PushController routes it.
+    if (parsed.kind === "open") return Notifications.BackgroundNotificationTaskResult.NoData;
     const id = response.notification.request.identifier;
-    const outcome = await performLog(parsed, id);
-    if (outcome === "logged" || outcome === "duplicate") {
-      // The acted-on notification stays in the shade after a background
-      // action; the confirmation replaces it.
+    // Every branch below ends the interaction: the acted-on notification
+    // stays in the shade after a background action (with the text field's
+    // spinner still going), so it is dismissed and whatever follows is a
+    // fresh local notification. The last response is cleared so a later
+    // launch does not replay it into the sheet.
+    const done = async () => {
       await Notifications.dismissNotificationAsync(id).catch(() => {});
-      // So a later launch does not replay this response into the sheet.
       await Notifications.clearLastNotificationResponseAsync().catch(() => {});
+    };
+    if (parsed.kind === "invalidAmount") {
+      // No app to open from here (the action is background-only on
+      // Android): say so, and let the tap finish it in the sheet.
+      await notify(
+        "That didn’t look like a page count. Tap to log it in Iqra.",
+        sheetHref(parsed.type, null, parsed.reminderId),
+      );
+      await done();
+      return Notifications.BackgroundNotificationTaskResult.NewData;
     }
+    const outcome = await performLog(parsed, responseKey(response));
+    if (outcome === "signedOut") {
+      await notify("Sign in to Iqra to log that.", "/today");
+    } else if (outcome === "wrongUser") {
+      await notify("That reminder was for another account on this phone.", "/today");
+    }
+    // "logged" and "failed" have already notified; "duplicate" is silent.
+    await done();
     return Notifications.BackgroundNotificationTaskResult.NewData;
   },
 );

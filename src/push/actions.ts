@@ -2,9 +2,10 @@ import * as Notifications from "expo-notifications";
 import { DEFAULT_ACTION_IDENTIFIER } from "expo-notifications";
 import { Platform } from "react-native";
 
+import { fetchMyRecentEntries } from "@/data/entryReads";
 import { insertEntry, markEntriesChanged } from "@/data/entryWrites";
 import type { Profile } from "@/lib/auth";
-import { getMyMembership, getMyRecentEntries } from "@/lib/data";
+import { getMyMembership } from "@/lib/data";
 import { currentStreak, localDate } from "@/lib/dates";
 import { toNativeHref } from "@/lib/deepLinks";
 import { ENTRY_META, isReadingType, TYPES_BY_MODE, type EntryType } from "@/lib/entries";
@@ -30,10 +31,31 @@ export type ParsedResponse =
   | { kind: "open"; href: string | null }
   /** A log button: write this type, with this many pages (null = the
    *  sheet's default for the type). `reminderId` keys Today's once-only
-   *  deep-link consumption. */
-  | { kind: "log"; type: EntryType; amount: number | null; reminderId: string | null }
+   *  deep-link consumption; `uid` is the member the push was sent to. */
+  | {
+      kind: "log";
+      type: EntryType;
+      amount: number | null;
+      reminderId: string | null;
+      uid: string | null;
+    }
   /** "Other amount" with text that is not a page count: open the sheet. */
   | { kind: "invalidAmount"; type: EntryType; reminderId: string | null };
+
+/**
+ * A key that is unique per delivered push. The request identifier alone is
+ * NOT: a remote push's identifier is its collapse id on iOS and its tag on
+ * Android, so every daily reminder would share one ("reminder") and the
+ * second one would read as a duplicate of the first. send-push stamps a
+ * per-message `sendId`; the delivery time is the fallback for pushes sent
+ * before that (two taps on one displayed notification share both).
+ */
+export function responseKey(response: Notifications.NotificationResponse): string {
+  const { request, date } = response.notification;
+  const sendId = request.content.data?.sendId;
+  if (typeof sendId === "string" && sendId) return sendId;
+  return `${request.identifier}@${date}`;
+}
 
 function urlParam(url: string | null, key: string): string | null {
   if (!url) return null;
@@ -51,6 +73,7 @@ export function parseResponse(response: Notifications.NotificationResponse): Par
   if (!action || action === DEFAULT_ACTION_IDENTIFIER) return { kind: "open", href };
 
   const reminderId = urlParam(url, "r");
+  const uid = typeof data?.uid === "string" ? data.uid : null;
   // The reading buttons log the type the reminder was for when it is a
   // reading type (`/today?log=revising`), else plain reading.
   const urlType = urlParam(url, "log") as EntryType | null;
@@ -59,21 +82,21 @@ export function parseResponse(response: Notifications.NotificationResponse): Par
 
   switch (action) {
     case ACTION.pages1:
-      return { kind: "log", type: readingType, amount: 1, reminderId };
+      return { kind: "log", type: readingType, amount: 1, reminderId, uid };
     case ACTION.pages5:
-      return { kind: "log", type: readingType, amount: 5, reminderId };
+      return { kind: "log", type: readingType, amount: 5, reminderId, uid };
     case ACTION.pagesOther: {
       const amount = parseLogAmount(response.userText);
       return amount == null
         ? { kind: "invalidAmount", type: readingType, reminderId }
-        : { kind: "log", type: readingType, amount, reminderId };
+        : { kind: "log", type: readingType, amount, reminderId, uid };
     }
     case ACTION.sabak:
-      return { kind: "log", type: "sabak", amount: null, reminderId };
+      return { kind: "log", type: "sabak", amount: null, reminderId, uid };
     case ACTION.sabakPara:
-      return { kind: "log", type: "sabak_para", amount: null, reminderId };
+      return { kind: "log", type: "sabak_para", amount: null, reminderId, uid };
     case ACTION.dhor:
-      return { kind: "log", type: "dor", amount: null, reminderId };
+      return { kind: "log", type: "dor", amount: null, reminderId, uid };
     default:
       return { kind: "open", href };
   }
@@ -93,10 +116,13 @@ export function sheetHref(
 
 // ── Idempotency ────────────────────────────────────────────────────────────
 // The Android task and the foreground listener can both see one response,
-// and the cold-start hook re-delivers the last one. Notification request ids
-// already logged are kept in a pref (capped) so no path writes twice.
+// the cold-start hook re-delivers the last one, and two quick taps on the
+// same notification start two task runs. Response keys already logged are
+// kept in a pref (capped); keys being written right now in a module Set,
+// checked before the first await so concurrent runs cannot both claim.
 
 const LOGGED_CAP = 20;
+const inFlight = new Set<string>();
 
 async function loggedIds(): Promise<string[]> {
   try {
@@ -128,9 +154,10 @@ async function unclaim(id: string): Promise<void> {
 
 // ── The write ──────────────────────────────────────────────────────────────
 
-export type LogOutcome = "logged" | "duplicate" | "signedOut" | "failed";
+export type LogOutcome = "logged" | "duplicate" | "signedOut" | "wrongUser" | "failed";
 
-async function notify(body: string, url: string): Promise<void> {
+/** A local notification, shown at once (the headless path's only UI). */
+export async function notify(body: string, url: string): Promise<void> {
   try {
     await Notifications.scheduleNotificationAsync({
       content: { title: "Iqra", body, data: { url, tag: "log-confirm" }, sound: false },
@@ -157,7 +184,20 @@ function describe(entry: NewEntry): string {
  * sheet prefilled; no retry queue (PHASE3.md: five people, keep it simple).
  */
 export async function performLog(
-  action: { type: EntryType; amount: number | null; reminderId: string | null },
+  action: { type: EntryType; amount: number | null; reminderId: string | null; uid: string | null },
+  responseKey: string,
+): Promise<LogOutcome> {
+  if (inFlight.has(responseKey)) return "duplicate";
+  inFlight.add(responseKey);
+  try {
+    return await performLogClaimed(action, responseKey);
+  } finally {
+    inFlight.delete(responseKey);
+  }
+}
+
+async function performLogClaimed(
+  action: { type: EntryType; amount: number | null; reminderId: string | null; uid: string | null },
   responseId: string,
 ): Promise<LogOutcome> {
   if (!(await claim(responseId))) return "duplicate";
@@ -171,6 +211,12 @@ export async function performLog(
       await unclaim(responseId);
       return "signedOut";
     }
+    // A push addressed to another member (a row left behind on a shared
+    // phone) must never write into this account.
+    if (action.uid && action.uid !== userId) {
+      await unclaim(responseId);
+      return "wrongUser";
+    }
     const [profileRes, membership] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
       getMyMembership(supabase),
@@ -181,7 +227,13 @@ export async function performLog(
       throw new Error(`type ${action.type} not offered in ${profile.mode} mode`);
     }
     const mush = profile.mushaf ?? DEFAULT_MUSHAF;
-    const recent = await getMyRecentEntries(supabase, membership.group_id, userId);
+    // The throwing read: a dead network must fail here, not continue from
+    // "nothing logged" and reset the bookmark or restart sabak at Juz 1.
+    const { rows: recent, error: readError } = await fetchMyRecentEntries(
+      membership.group_id,
+      userId,
+    );
+    if (readError || !recent) throw new Error("recent entries unavailable");
     const entry = continuedEntry(action.type, recent, mush, action.amount);
     const { row, error } = await insertEntry(userId, membership.group_id, entry);
     if (error || !row) throw new Error(error ?? "insert failed");

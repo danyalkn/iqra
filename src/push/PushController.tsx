@@ -1,10 +1,10 @@
 import * as Notifications from "expo-notifications";
 import { router, useRootNavigationState, type Href } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { AppState, Platform } from "react-native";
 
 import { useSession } from "@/providers/SessionProvider";
-import { parseResponse, sheetHref, wasLogged } from "@/push/actions";
+import { parseResponse, responseKey, sheetHref, wasLogged } from "@/push/actions";
 import { registerCategories } from "@/push/categories";
 import { isChatVisible } from "@/push/chatVisibility";
 import { syncPush } from "@/push/register";
@@ -26,7 +26,8 @@ import { registerNotificationTask } from "@/push/task";
  *    signed out survives the login instead of being dropped (the Phase 0
  *    known gap). Warm taps arrive through the response listener; the cold
  *    start through useLastNotificationResponse. The two overlap, so every
- *    response is deduped by its request identifier.
+ *    response is deduped by its per-push key (see responseKey: the request
+ *    identifier alone repeats across pushes with one collapse id / tag).
  *  - action buttons on reminders (logReading / logHifz categories): a tap
  *    in the foreground, and every tap on iOS, opens the log sheet prefilled
  *    with the type and amount (`/today?log=<type>&amount=<n>`). Android
@@ -35,6 +36,10 @@ import { registerNotificationTask } from "@/push/task";
  *    the task already logged) so nothing is written twice.
  *  - the launch / sign-in self-heal: re-register this device's token for a
  *    member who turned push on here (the web's syncPushSubscription).
+ *
+ * No React state: the waiting href lives in a ref and delivery is a plain
+ * function called from the listener and from the effect that watches the
+ * gate, so nothing sets state inside an effect.
  */
 
 // Categories are per install and the Android task must be registered every
@@ -73,25 +78,48 @@ export function PushController() {
   const { loading, session, isOnboarded, user } = useSession();
   const userId = user?.id ?? null;
   const navReady = !!useRootNavigationState()?.key;
-  const gateOpen = !loading && !!session && isOnboarded;
+  const ready = !loading && !!session && isOnboarded && navReady;
 
   // The href waiting for the gate. Kept in memory only: a kill mid-login
-  // loses it, which is acceptable for a five-person circle (PHASE3.md). A
-  // ref plus a wake counter rather than state, so discarding it never sets
-  // state inside an effect.
+  // loses it, which is acceptable for a five-person circle (PHASE3.md).
   const pending = useRef<string | null>(null);
-  const [wake, setWake] = useState(0);
+  const readyRef = useRef(ready);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const last = Notifications.useLastNotificationResponse();
+  // Deliver once the gate is open and the navigator exists. `index` has
+  // already redirected to /today by then, so this is a push, never a
+  // replace, and a /today?log=... link lands on the Today tab with its
+  // params (Today consumes them once and clears them). Next tick, so the
+  // gate's own redirect settles before a push is stacked on it.
+  const deliver = useRef(() => {
+    if (!pending.current || !readyRef.current || timer.current) return;
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      const href = pending.current;
+      pending.current = null;
+      if (!href) return;
+      try {
+        router.push(href as Href);
+      } catch (e) {
+        console.warn("Push deep link failed", href, e);
+      }
+      Notifications.clearLastNotificationResponseAsync().catch(() => {});
+    }, 0);
+  });
+
+  useEffect(() => {
+    readyRef.current = ready;
+    if (ready) deliver.current();
+  }, [ready]);
 
   // One place for both delivery paths.
   const onResponse = useRef((response: Notifications.NotificationResponse) => {
-    const id = response.notification.request.identifier;
-    if (handled.has(id)) return;
-    handled.add(id);
+    const key = responseKey(response);
+    if (handled.has(key)) return;
+    handled.add(key);
     const queue = (href: string) => {
       pending.current = href;
-      setWake((n) => n + 1);
+      deliver.current();
     };
     const parsed = parseResponse(response);
     if (parsed.kind === "open") {
@@ -106,11 +134,12 @@ export function PushController() {
     // this listener may still fire alongside it; stay out of its way.
     if (Platform.OS === "android" && AppState.currentState !== "active") return;
     // Already written by the task (a cold start replaying that response).
-    void wasLogged(id).then((done) => {
+    void wasLogged(key).then((done) => {
       if (!done) queue(sheetHref(parsed.type, parsed.amount, parsed.reminderId));
     });
   });
 
+  const last = Notifications.useLastNotificationResponse();
   useEffect(() => {
     if (last) onResponse.current(last);
   }, [last]);
@@ -119,27 +148,6 @@ export function PushController() {
     const sub = Notifications.addNotificationResponseReceivedListener((r) => onResponse.current(r));
     return () => sub.remove();
   }, []);
-
-  // Deliver once the gate is open and the navigator exists. `index` has
-  // already redirected to /today by then, so this is a push, never a
-  // replace, and a /today?log=... link lands on the Today tab with its
-  // params (Today consumes them once and clears them).
-  useEffect(() => {
-    if (!pending.current || !gateOpen || !navReady) return;
-    // Next tick: let the gate's own redirect settle before stacking a push.
-    const t = setTimeout(() => {
-      const href = pending.current;
-      pending.current = null;
-      if (!href) return;
-      try {
-        router.push(href as Href);
-      } catch (e) {
-        console.warn("Push deep link failed", href, e);
-      }
-      Notifications.clearLastNotificationResponseAsync().catch(() => {});
-    }, 0);
-    return () => clearTimeout(t);
-  }, [wake, gateOpen, navReady]);
 
   // Sign-out drops whatever was waiting: the next member to sign in must
   // not inherit a link meant for the previous one. (Signed out at tap time
