@@ -56,13 +56,6 @@ export const REVISION_TYPE: Record<RevisionRole, Extract<EntryType, "sabak_para"
   older: "dor",
 };
 
-/** How often, in words, for the reason line under each row. */
-export const REVISION_CADENCE: Record<RevisionRole, string> = {
-  current: "every other day",
-  previous: "every 3 days",
-  older: "once a week",
-};
-
 /** The fields the plan reads; a full LogRow fits. */
 export type RevisionEntry = Pick<LogRow, "entry_type" | "juz" | "logged_at">;
 
@@ -216,17 +209,21 @@ export function dueAhead(
   return out;
 }
 
-/** The plain reason line under a row: "Last revised 2 days ago · every
- *  other day", or "Not revised yet". */
+/** Why a juz is suggested, worded as advice rather than a rule (owner,
+ *  2026-10-17: "make it sound like a suggestion"), and never so it could
+ *  read as already revised: "It's been 4 days since you revised this. Your
+ *  current juz stays strongest with a revision every other day." */
 export function revisionReason(item: RevisionItem): string {
-  if (item.daysSince == null) return "Not revised yet";
-  const ago =
-    item.daysSince === 0
-      ? "today"
-      : item.daysSince === 1
-        ? "yesterday"
-        : `${item.daysSince} days ago`;
-  return `Last revised ${ago} · ${REVISION_CADENCE[item.role]}`;
+  const since =
+    item.daysSince == null
+      ? "No revision logged for this juz yet."
+      : `It’s been ${item.daysSince} ${item.daysSince === 1 ? "day" : "days"} since you revised this.`;
+  const why: Record<RevisionRole, string> = {
+    current: "Your current juz stays strongest with a revision every other day.",
+    previous: "The juz before it holds best with a look every few days.",
+    older: "A weekly old review keeps older juz fresh.",
+  };
+  return `${since} ${why[item.role]}`;
 }
 
 /**

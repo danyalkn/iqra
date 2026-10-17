@@ -69,21 +69,28 @@ function fireDate(ymd: string): Date {
 
 /** Plain meaning first, the hifz word in brackets (no bare jargon). */
 const MEANING: Record<RevisionItem["type"], string> = {
-  sabak_para: "Recent revision",
-  dor: "Old review",
+  sabak_para: "a recent revision",
+  dor: "an old review",
 };
 
-/** One sentence per type present, in plan order: "Recent revision (Sabak
- *  Para): Juz 3, Juz 2. Old review (Dhor): Juz 1." */
+function juzList(juz: number[]): string {
+  const names = juz.map((n) => `Juz ${n}`);
+  return names.length <= 1
+    ? names.join("")
+    : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** A suggestion, not an order (owner, 2026-10-17), one sentence per type in
+ *  plan order: "Juz 3 and Juz 2 could use a recent revision (Sabak Para)
+ *  today. Skip it if you have another plan." */
 function body(slot: RevisionSlot): string {
   const byType = new Map<RevisionItem["type"], number[]>();
   for (const j of slot.juz) byType.set(j.type, [...(byType.get(j.type) ?? []), j.juz]);
-  return [...byType]
-    .map(
-      ([type, juz]) =>
-        `${MEANING[type]} (${ENTRY_META[type].label}): ${juz.map((n) => `Juz ${n}`).join(", ")}.`,
-    )
-    .join(" ");
+  const lines = [...byType].map(
+    ([type, juz]) =>
+      `${juzList(juz)} could use ${MEANING[type]} (${ENTRY_META[type].label}) today.`,
+  );
+  return `${lines.join(" ")} Skip it if you have another plan.`;
 }
 
 async function schedule(userId: string, slots: RevisionSlot[]): Promise<void> {
@@ -103,7 +110,7 @@ async function schedule(userId: string, slots: RevisionSlot[]): Promise<void> {
       await Notifications.scheduleNotificationAsync({
         identifier: `${REVISION_ID_PREFIX}${slot.day}`,
         content: {
-          title: "Revision",
+          title: "Revision suggestion",
           body: body(slot),
           // uid: PushController follows a tap only for the member it was for.
           data: { url: "/today", tag: "revision", uid: userId },

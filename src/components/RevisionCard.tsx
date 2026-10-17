@@ -16,7 +16,8 @@ function meaning(type: RevisionItem["type"]): string {
 }
 
 /**
- * "Revise today" on Today, hifz only (docs/DECISIONS.md "Revision plan"):
+ * "Suggested revision" on Today, hifz only (advice, not a rule: the owner
+ * asked for it to read as a suggestion) (docs/DECISIONS.md "Revision plan"):
  * one row per juz that is due and not hidden, current juz first. Tapping a
  * row opens the log sheet for that type with the juz preselected; the X
  * hides the row for the rest of the day. Renders nothing when the list is
@@ -37,7 +38,12 @@ export function RevisionCard({
   return (
     <Card style={styles.card}>
       <View style={styles.head}>
-        <Text style={[Type.callout, styles.title, { color: c.foreground }]}>Revise today</Text>
+        <Text style={[Type.callout, styles.title, { color: c.foreground }]}>
+          Suggested revision
+        </Text>
+        <Text style={[Type.footnote, { color: c.muted }]}>
+          Ideas from your recent entries. Tap one to log it, or skip it for today.
+        </Text>
         <Text style={[Type.footnote, { color: c.faint }]}>{types.map(meaning).join(" · ")}</Text>
       </View>
       {items.map((item) => (
@@ -59,7 +65,7 @@ export function RevisionCard({
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Hide Juz ${item.juz} for today`}
+            accessibilityLabel={`Skip Juz ${item.juz} for today`}
             hitSlop={6}
             onPress={() => onHide(item.juz)}
             style={({ pressed }) => [styles.iconBtn, pressed && { backgroundColor: c.surface2 }]}

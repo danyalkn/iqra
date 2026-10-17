@@ -73,7 +73,12 @@ Personal only (see "No showing off").
   Para, "never 3 days without"), each older juz every 7 days (Dhor).
   A juz is **due** when the days since its last revision (profile-local
   dates) reach its interval; never revised means due.
-- **Today card** "Revise today" lists what is due, current first. Tapping a
+- **Worded as suggestions, not rules** (owner, 2026-10-17): the Today
+  card is "Suggested revision", each row says why ("It's been 4 days since
+  you revised this. Your current juz stays strongest with a revision every
+  other day."), and the nudge is "Revision suggestion" ending "Skip it if
+  you have another plan."
+- **Today card** lists what is due, current first. Tapping a
   row opens the log sheet for that type and juz. A row can be **hidden for
   today** (comes back tomorrow if still due); a revision logged today
   removes it.
