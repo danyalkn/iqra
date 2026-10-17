@@ -13,6 +13,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
+import { SyncController } from "@/data/SyncController";
 import { SessionProvider, useSession } from "@/providers/SessionProvider";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { PushController } from "@/push/PushController";
@@ -48,6 +49,9 @@ export default function RootLayout() {
             {/* Push: foreground handler, tap routing through the gate,
                 token self-heal. Needs useSession, so it sits here. */}
             <PushController />
+            {/* Offline outbox: sends queued entries when the app comes
+                back and on a backoff timer while any wait. */}
+            <SyncController />
             <RootNavigator />
           </SessionProvider>
         </ThemeProvider>

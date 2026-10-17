@@ -18,17 +18,37 @@ export function isMissingMushaf(err: { message?: string } | null): boolean {
   return !!err && /mushaf/i.test(err.message ?? "");
 }
 
+/** The words for a write that never got an answer (status 0: postgrest-js
+ *  reports a dead network that way). Edits and deletes of rows already on
+ *  the server need a connection; only new entries queue (docs/NEXT-SESSION.md). */
+export const NEEDS_CONNECTION = "That needs a connection. Try again when you’re back online.";
+
+export type InsertResult = {
+  row: LogRow | null;
+  error: string | null;
+  /** HTTP status; 0 when the request never got an answer. */
+  status: number;
+  /** Postgres / PostgREST error code, when the server sent one. */
+  code: string | null;
+};
+
 /** Create an entry for `userId` in `groupId`. `logged_at` is sent only when
- *  the payload backdates; otherwise the server stamps now. */
+ *  the payload has one; otherwise the server stamps now. The outbox
+ *  (src/data/sync.ts) always sends the entry's own `id` and its
+ *  `logged_at`, plus `offline_logged_at` once a send has failed, which the
+ *  backdate guard judges a late entry by (migration 20261017180000). */
 export async function insertEntry(
   userId: string,
   groupId: string,
   payload: NewEntry,
-): Promise<{ row: LogRow | null; error: string | null }> {
+  opts: { id?: string; offlineLoggedAt?: string | null } = {},
+): Promise<InsertResult> {
   const base: Record<string, unknown> = {
+    ...(opts.id ? { id: opts.id } : {}),
     user_id: userId,
     group_id: groupId,
     ...(payload.logged_at ? { logged_at: payload.logged_at } : {}),
+    ...(opts.offlineLoggedAt ? { offline_logged_at: opts.offlineLoggedAt } : {}),
     entry_type: payload.entry_type,
     from_ref: payload.from_ref,
     to_ref: payload.to_ref,
@@ -48,9 +68,14 @@ export async function insertEntry(
     res = await supabase.from("log_entries").insert(base).select("*").single();
   }
   if (res.error || !res.data) {
-    return { row: null, error: res.error?.message ?? "Couldn’t save that entry. Try again." };
+    return {
+      row: null,
+      error: res.error?.message ?? "Couldn’t save that entry. Try again.",
+      status: res.status,
+      code: res.error?.code || null,
+    };
   }
-  return { row: res.data as LogRow, error: null };
+  return { row: res.data as LogRow, error: null, status: res.status, code: null };
 }
 
 /** Save edits to an entry. `logged_at` is never changed by an edit. */
@@ -84,6 +109,7 @@ export async function updateEntry(
       .single();
   }
   if (res.error || !res.data) {
+    if (res.status === 0) return { row: null, error: NEEDS_CONNECTION };
     return { row: null, error: res.error?.message ?? "Couldn’t save your changes. Try again." };
   }
   return { row: res.data as LogRow, error: null };
@@ -91,8 +117,9 @@ export async function updateEntry(
 
 /** Delete an entry. Returns an error message, or null on success. */
 export async function deleteEntry(id: string): Promise<string | null> {
-  const { error } = await supabase.from("log_entries").delete().eq("id", id);
-  return error ? "Couldn’t delete that entry." : null;
+  const { error, status } = await supabase.from("log_entries").delete().eq("id", id);
+  if (!error) return null;
+  return status === 0 ? NEEDS_CONNECTION : "Couldn’t delete that entry.";
 }
 
 /* Today keeps the entries it loaded while its tab is in the background. When
