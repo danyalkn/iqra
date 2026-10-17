@@ -178,6 +178,12 @@ function upsertRows(prev: LogRow[], rows: LogRow[]): LogRow[] {
   return [...rows, ...prev.filter((r) => !ids.has(r.id))];
 }
 
+/** How long a sent row is laid over server reads that may predate it. */
+const SYNCED_KEEP_MS = 2 * 60 * 1000;
+
+/** How long a deep link waits on the saved copy for the server's answer. */
+const SEED_WAIT_MS = 4000;
+
 function entriesWord(n: number): string {
   return n === 1 ? "1 entry" : `${n} entries`;
 }
@@ -259,6 +265,9 @@ export default function TodayScreen() {
   const linkId = openLog ? `${openLog}|${openLogKey ?? ""}|${openAmount ?? ""}` : null;
   const [seenLink, setSeenLink] = useState<string | null>(null);
   const [pendingLog, setPendingLog] = useState<EntryType | null>(null);
+  // The first server read has landed or failed (or the saved copy has
+  // waited SEED_WAIT_MS for it): rows a deep-linked sheet may continue from.
+  const [firstReadSettled, setFirstReadSettled] = useState(false);
   // Pages the link asked to prefill; the sheet reads it once per open.
   const [sheetPreset, setSheetPreset] = useState<number | null>(null);
   // The juz a revision-card row asked to prefill (null = the sheet's usual
@@ -271,11 +280,12 @@ export default function TodayScreen() {
       setSheetPreset(openAmount);
     }
   }
-  // Release only once the rows are here (or the first fetch has given up):
-  // the LogSheet freezes lastOfType at mount (its form key excludes it on
-  // purpose), so opening before the first fetch would lose the hifz
-  // continuation the web always had at first paint.
-  if (pendingLog && (membership === null || loadState !== "loading")) {
+  // Release only once the server has answered (or given up, or a saved copy
+  // has been on screen a few seconds while offline): the LogSheet freezes
+  // lastOfType at mount (its form key excludes it on purpose), so opening
+  // on rows that are about to change would lose the hifz continuation the
+  // web always had at first paint.
+  if (pendingLog && (membership === null || firstReadSettled)) {
     setPendingLog(null);
     // Not in a circle: nothing can be logged, drop the intent (web: the
     // initializer required groupId too).
@@ -319,6 +329,10 @@ export default function TodayScreen() {
   // copy, the server's first answer remounts it (new key) with fresh rows.
   const remindersSeeded = useRef(false);
   const [remindersKey, setRemindersKey] = useState("saved");
+  // Rows the outbox sent lately. A read that started before one landed can
+  // answer after it without it; such rows are added back (never replacing
+  // the server's copy, which may hold a later edit).
+  const recentlySynced = useRef(new Map<string, { row: LogRow; at: number }>());
 
   // The web page did this on the server: recent entries and today's +
   // tomorrow's one-time reminders in one go, once the circle is known. Here
@@ -343,6 +357,9 @@ export default function TodayScreen() {
           setDayReminders((cur) => cur ?? saved.reminders);
           setLoadState("ready");
           if (lastReadFailed.current) setOffline(true);
+          // Offline the server may take half a minute to give up; a deep
+          // link should not wait that long on a usable saved copy.
+          setTimeout(() => setFirstReadSettled(true), SEED_WAIT_MS);
         },
       );
     }
@@ -361,6 +378,7 @@ export default function TodayScreen() {
         setHifzHistory({ rows, cutoff });
         void writeCache("hifz", userId, { rows, cutoff });
       }
+      setFirstReadSettled(true);
       if (recent.error || !recent.rows || reminders.error || !reminders.rows) {
         lastReadFailed.current = true;
         if (loadStateRef.current === "ready" || seededReady.current) {
@@ -377,7 +395,14 @@ export default function TodayScreen() {
       landed.current = true;
       lastReadFailed.current = false;
       const rows = reminders.rows;
-      setEntries(recent.rows);
+      const cutoffMs = Date.now() - SYNCED_KEEP_MS;
+      const missing: LogRow[] = [];
+      const have = new Set(recent.rows.map((r) => r.id));
+      for (const [id, v] of recentlySynced.current) {
+        if (v.at < cutoffMs) recentlySynced.current.delete(id);
+        else if (!have.has(id)) missing.push(v.row);
+      }
+      setEntries(missing.length ? [...missing, ...recent.rows] : recent.rows);
       if (remindersSeeded.current) {
         remindersSeeded.current = false;
         setDayReminders(rows);
@@ -387,15 +412,32 @@ export default function TodayScreen() {
       }
       setLoadState("ready");
       setOffline(false);
-      void writeCache("today", userId, { entries: recent.rows, reminders: rows });
       // A read that landed means the connection is back: send what waits.
       void syncOutbox(userId);
     });
-  }, [groupId, userId, tz, setEntries, setDayReminders, setLoadState, setOffline, setHifzHistory]);
+  }, [
+    groupId,
+    userId,
+    tz,
+    setEntries,
+    setDayReminders,
+    setLoadState,
+    setOffline,
+    setHifzHistory,
+    setFirstReadSettled,
+  ]);
 
   useEffect(() => {
     void loadToday();
   }, [loadToday]);
+
+  // The saved copy follows the list (a read, a sent entry, an edit), so an
+  // offline launch or a notification button continues from the latest rows
+  // this phone knows. Never before something real is on screen.
+  useEffect(() => {
+    if (!userId || loadState !== "ready") return;
+    void writeCache("today", userId, { entries: serverEntries, reminders: dayReminders ?? [] });
+  }, [userId, loadState, serverEntries, dayReminders]);
 
   // The OS may have killed the sockets while the app was away; a load that
   // never landed gets another go on return. So does a list the Android
@@ -465,7 +507,7 @@ export default function TodayScreen() {
   // Logged offline and not sent yet (a first send still in flight is just
   // "saving", not waiting).
   const waitingCount = queued.filter(
-    (i) => i.state === "pending" && i.attempts > 0 && !outbox.sending.has(i.id),
+    (i) => i.state === "pending" && !i.discard && i.attempts > 0 && !outbox.sending.has(i.id),
   ).length;
   const syncMark = (id: string): "saving" | "waiting" | undefined => {
     const item = queuedById.get(id);
@@ -480,6 +522,8 @@ export default function TodayScreen() {
     if (!userId) return;
     return onSynced((uid, rows) => {
       if (uid !== userId) return;
+      const at = Date.now();
+      for (const row of rows) recentlySynced.current.set(row.id, { row, at });
       setEntries((prev) => upsertRows(prev, rows));
       setOffline(false);
     });
@@ -646,7 +690,7 @@ export default function TodayScreen() {
         return;
       }
     }
-    const prev = serverEntries;
+    const original = serverEntries.find((e) => e.id === id);
     setEntries((p) =>
       p.map((e) =>
         e.id === id
@@ -660,7 +704,8 @@ export default function TodayScreen() {
     );
     const { row, error } = await updateEntry(id, payload);
     if (error || !row) {
-      setEntries(prev);
+      // Put back only this row: others may have changed meanwhile.
+      if (original) setEntries((p) => p.map((e) => (e.id === id ? original : e)));
       setError(error ?? "Couldn’t save your changes. Try again.");
       failHaptic();
       return;
@@ -712,8 +757,7 @@ export default function TodayScreen() {
       state: "pending",
     };
     await enqueue(item);
-    const result = await syncOutbox(userId);
-    if (result.offline) setOffline(true);
+    await syncOutbox(userId);
     // Refused outright: it moves to the "Couldn't sync" card.
     const left = outboxSnapshot(userId).items.find((i) => i.id === item.id);
     if (left?.state === "rejected") failHaptic();
@@ -722,6 +766,7 @@ export default function TodayScreen() {
   const handleDelete = async (id: string) => {
     // Still in the outbox: dropping it is all there is to do. False means it
     // was sent meanwhile (and has joined the server rows); delete that.
+    recentlySynced.current.delete(id);
     if (userId && queuedById.has(id) && (await discardQueued(userId, id))) return;
     setEntries((p) => p.filter((e) => e.id !== id));
     const error = await deleteEntry(id);
