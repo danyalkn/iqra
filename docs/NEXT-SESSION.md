@@ -147,6 +147,62 @@ created_at desc`), and that Feed shows them. Also the 3 AM rejection path
 (seed via a backdated outbox row in a test build or a throwaway account,
 never the real circle).
 
+### Offline logging: what was built (2026-10-17)
+
+Code complete in commits 8c1a568..7cf9395, reviewed (Opus, 2 high and 5
+medium findings, all fixed in the `fix(...)` commits after 6db970d),
+migration 20261017180000 applied and recorded. Decisions taken while
+building, refining the plan above:
+
+- **3 AM window: owner chose a grace by offline time**, not the strict
+  rule. `log_entries.offline_logged_at` is sent only once a first send has
+  failed; the guard judges an insert by it when it is plausible (not in
+  the future, at most 7 days old, not before `logged_at`), else by now().
+  The 7-day bound was the session's call inside the owner's decision; the
+  owner can change it. "Couldn't sync: yesterday closed" still exists for
+  the leftovers (Log for today / Discard).
+- **One write path.** Every new entry, online or not, goes through the
+  outbox and is sent from there; the temp-id optimistic row is gone. A
+  row says "saving…" until its first send fails, then "Waiting to sync"
+  (still editable; the edit stays on the phone).
+- **Exactly once.** Client uuid primary key; a 23505 on retry is read back
+  by id, checked to be this member's, and the member's later edit is
+  applied with an update. A discarded entry whose send ever failed is kept
+  as a hidden discard and deleted on the server by id. Sends are cut off
+  after 15 s and count as no connection.
+- **Offline launch was broken before this work** (found while designing):
+  with an access token older than an hour, supabase-js reports no session
+  offline after retrying the refresh for ~25 s, so the app showed the
+  splash, then the login screen; the profile read failure would also send
+  an onboarded member to onboarding. Fixed: SessionProvider waits 2.5 s,
+  then uses the keychain session (supabase-js keeps it for a later
+  refresh); profile and membership come from saved copies first.
+- **Guarded fetch** (`src/supabase/client.ts`): while a member is signed
+  in, a REST request carrying the bare publishable key is failed as if
+  offline. Without it RLS answers with an empty list and no error (offline,
+  and for up to a minute after reconnecting while supabase-js caches a
+  failed refresh), which would read as "nothing logged".
+- **Saved copies** (`iqra:cache:<kind>:<userId>`): profile, circle, Today
+  rows and reminders, hifz history. Today paints them at once and says
+  "Offline, showing saved data." while reads fail. Feed, Insights, Chat
+  and the Journal stay online-only (they already say "Check your
+  connection").
+- **Notification buttons** queue first (1.5 s look at fresh rows when
+  saved copies exist), then wait up to 8 s for the send: "Logged ..." or
+  "Saved ... It will sync when you're back online." Who is signed in comes
+  from the keychain.
+- **Triggers**: a new entry, a Today read that landed, foreground return,
+  a 5 s to 60 s backoff while entries wait, pull to refresh, the end of a
+  button log. No expo-network (native).
+- **Sign-out** gives waiting entries one more send, then asks; it clears
+  the outbox and every saved copy. A user change (e.g. a dead refresh
+  token) clears the saved copies but keeps that member's outbox for when
+  they sign back in.
+- Accepted gaps: a button's "continue from" uses the rows this phone knows
+  (the saved copy follows every change here, but a log from another device
+  since the last read is missed); a revoked session leaves its outbox on
+  the phone until that member signs back in.
+
 ## 2. Owner checks still open
 
 1. **Locked-and-killed notification log**: swipe Iqra away, lock the

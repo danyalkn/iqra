@@ -543,6 +543,15 @@ once Apple approves the entitlement; do not block Phase 3 on it.
   shared-lib addition (pure; the web has no revision plan, nothing to
   mirror); it feeds Today's "Revise today" card and the local 20:00 nudges
   in `src/push/revisionNudge.ts`.
+- Offline logging (2026-10-17): native-only shared-lib additions, pure,
+  nothing to mirror (the web cannot log offline): `src/lib/uuid.ts`
+  (client v4 ids, crypto.getRandomValues or Math.random) and
+  `src/lib/outbox.ts` (queued-entry shape, merge into server rows, send
+  order, error classification). Storage in `src/storage/outbox.ts` and
+  `src/storage/cache.ts`, sending in `src/data/sync.ts` and
+  `SyncController.tsx`. The full design and its decisions are in
+  `docs/NEXT-SESSION.md` "Offline logging: what was built". No change to
+  any existing shared-lib file.
 - Ultracode: good for Phase 1 and 2 (independent screens). Not for Phase 0,
   3, or 4, which need one consistent thread of decisions.
 - Model guidance from the owner (revised 2026-10-16): the main session runs
