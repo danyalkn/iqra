@@ -276,6 +276,15 @@ that refine the plan above:
   fresh-entry defaults and the row constructors LogSheet used inline, so
   the notification actions save exactly what the sheet would. Native-first;
   the web keeps the rules inline until it adopts the file.
+- **Dedupe key is per delivered push, not the request identifier.** The
+  OS reuses the identifier across pushes with one collapse id / tag (every
+  daily reminder is "reminder"), so send-push stamps `data.sendId` per
+  message and the app falls back to `identifier@date`. Found in review.
+- **A push names its recipient** (`data.uid`); the app refuses to log for
+  another account, and the migration's `push_subscriptions_claim_token`
+  trigger deletes other members' rows with the same Expo token on insert.
+- **DayReminders no longer caches "on"**; it re-reads the push state on
+  mount, sheet open and foreground return.
 - **Custom entry** `index.js` imports `src/push/task` before
   `expo-router/entry` (the docs require the task at module scope in an
   early module). `package.json` main points at it.
