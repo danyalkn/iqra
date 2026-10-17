@@ -15,6 +15,7 @@ import {
 import { registerCategories } from "@/push/categories";
 import { isChatVisible } from "@/push/chatVisibility";
 import { syncPush } from "@/push/register";
+import { refreshRevisionNudges } from "@/push/revisionNudge";
 import { registerNotificationTask } from "@/push/task";
 
 /**
@@ -49,6 +50,7 @@ import { registerNotificationTask } from "@/push/task";
  *    in); the app just opens where it was.
  *  - the launch / sign-in self-heal: re-register this device's token for a
  *    member who turned push on here (the web's syncPushSubscription).
+ *  - the revision nudges' foreground refresh (src/push/revisionNudge.ts).
  *
  * No React state: the waiting href lives in a ref and delivery is a plain
  * function called from the listener and from the effect that watches the
@@ -209,6 +211,18 @@ export function PushController() {
       if (state !== "active" || done) return;
       done = true;
       void syncPush(userId);
+    });
+    return () => sub.remove();
+  }, [userId]);
+
+  // Every return to the foreground rebuilds the revision nudges from the
+  // server, so a revision logged on the web or another phone cancels
+  // tonight's nudge the next time the app is opened (revisionNudge.ts has
+  // the accepted gap when it is not opened at all).
+  useEffect(() => {
+    if (!userId) return;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void refreshRevisionNudges(userId);
     });
     return () => sub.remove();
   }, [userId]);

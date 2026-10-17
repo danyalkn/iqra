@@ -55,6 +55,16 @@ function isDenied(p: Perms): boolean {
   return p.status === PermissionStatus.DENIED && !p.canAskAgain;
 }
 
+/** Whether the OS currently lets Iqra show notifications. Reads only, never
+ *  prompts (local notifications such as the revision nudge must not ask). */
+export async function notificationsAllowed(): Promise<boolean> {
+  try {
+    return isGranted(await Notifications.getPermissionsAsync());
+  } catch {
+    return false;
+  }
+}
+
 async function ensureChannel(): Promise<void> {
   if (Platform.OS !== "android") return;
   try {

@@ -12,6 +12,7 @@ import {
 
 import { isOnboarded as computeOnboarded, type Profile } from "@/lib/auth";
 import { unregisterPush } from "@/push/register";
+import { cancelRevisionNudges } from "@/push/revisionNudge";
 import { AUTH_STORAGE_KEY, supabase } from "@/supabase/client";
 import { secureStorage } from "@/supabase/secureStorage";
 
@@ -92,6 +93,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
       if (cancelled) return;
       const nextId = next?.user.id ?? null;
+      // The revision nudges belong to the member who was signed in. Every
+      // way out drops them, not only the Sign out button: a revoked or
+      // expired refresh token ends the session here too, and the tabs that
+      // would otherwise cancel them unmount. Best-effort and local.
+      if (activeUserId.current && nextId !== activeUserId.current) {
+        void cancelRevisionNudges();
+      }
       // TOKEN_REFRESHED for the same user does not change the profile.
       if (event === "TOKEN_REFRESHED" && nextId === activeUserId.current) {
         setSession(next);
@@ -129,7 +137,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const userId = activeUserId.current;
     if (userId) {
       await Promise.race([
-        unregisterPush(userId, { keepFlag: true }),
+        // The revision nudges are this member's, scheduled on this device
+        // (docs/DECISIONS.md "Revision plan"): the next person to sign in
+        // must not get them. Local, so it is quick.
+        Promise.all([unregisterPush(userId, { keepFlag: true }), cancelRevisionNudges()]),
         new Promise((r) => setTimeout(r, 2500)),
       ]).catch(() => {});
     }

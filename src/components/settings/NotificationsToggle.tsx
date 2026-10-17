@@ -7,6 +7,7 @@ import { Radius, Type } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { useSession } from "@/providers/SessionProvider";
 import { getPushState, registerPush, unregisterPush, type PushState } from "@/push/register";
+import { cancelRevisionNudges } from "@/push/revisionNudge";
 
 /**
  * Settings switch for push notifications. Ported from
@@ -55,7 +56,11 @@ export function NotificationsToggle() {
     setBusy(true);
     setError(null);
     try {
-      setState(next ? await registerPush(userId) : await unregisterPush(userId));
+      const result = next ? await registerPush(userId) : await unregisterPush(userId);
+      // Off means off for the local revision nudges too; Today schedules
+      // them again on its next focus once push is back on.
+      if (!next) void cancelRevisionNudges();
+      setState(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {

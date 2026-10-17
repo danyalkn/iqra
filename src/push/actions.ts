@@ -18,6 +18,7 @@ import { supabase } from "@/supabase/client";
 
 import { ACTION } from "./categories";
 import { CHANNEL_ID } from "./register";
+import { refreshRevisionNudges } from "./revisionNudge";
 
 /**
  * What a notification response asks for, and the one-tap log it performs.
@@ -265,6 +266,13 @@ async function performLogClaimed(
       `Logged ${describe(entry)}. Streak: ${streak} ${streak === 1 ? "day" : "days"}.`,
       "/today",
     );
+    // A hifz log can change tonight's revision nudge (a revision drops its
+    // juz; a Sabak can move the current juz). After the confirmation so it
+    // never delays it; refreshRevisionNudges never throws, and the catch
+    // keeps a surprise out of the "Couldn't log that" path below.
+    if (!isReadingType(entry.entry_type)) {
+      await refreshRevisionNudges(userId).catch(() => {});
+    }
     return "logged";
   } catch (e) {
     console.warn("Log from notification failed", e);
