@@ -1,11 +1,11 @@
 import * as Notifications from "expo-notifications";
 import { DEFAULT_ACTION_IDENTIFIER } from "expo-notifications";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 
 import { markEntriesChanged } from "@/data/entryWrites";
 import { logContext } from "@/data/logContext";
 import { setAfterHifzSync, syncOutbox } from "@/data/sync";
-import { withTimeout } from "@/data/timeout";
+import { TIMED_OUT, withTimeout } from "@/data/timeout";
 import { currentStreak, localDate } from "@/lib/dates";
 import { toNativeHref } from "@/lib/deepLinks";
 import { ENTRY_META, isReadingType, TYPES_BY_MODE, type EntryType } from "@/lib/entries";
@@ -15,7 +15,7 @@ import type { OutboxItem } from "@/lib/outbox";
 import { pagesPhrase } from "@/lib/position";
 import type { NewEntry } from "@/lib/types";
 import { uuidv4 } from "@/lib/uuid";
-import { enqueue, loadOutbox } from "@/storage/outbox";
+import { enqueue, isSending, loadOutbox } from "@/storage/outbox";
 import { PREF_KEYS, readPref } from "@/storage/prefs";
 import { readStoredSession } from "@/supabase/client";
 
@@ -180,6 +180,12 @@ function describe(entry: NewEntry): string {
  *  will sync later (a background launch has seconds before suspension). */
 const SEND_WAIT_MS = 8000;
 
+/** Extra wait when that time ran out with this entry still being sent. iOS
+ *  can freeze a background launch about a second in (Release simulator,
+ *  2026-10-17); timers then run out during the freeze and fire on resume
+ *  while the request finishes within a moment. */
+const SEND_SETTLE_MS = 4000;
+
 /**
  * Log the entry a button stands for, with the sheet's defaults for
  * everything the button did not say (continuation from the last entry of
@@ -255,8 +261,15 @@ async function performLogClaimed(
     // Today and the revision nudges count it from here on, sent or not.
     markEntriesChanged();
 
-    await withTimeout(syncOutbox(userId), SEND_WAIT_MS);
+    const run = syncOutbox(userId);
+    if ((await withTimeout(run, SEND_WAIT_MS)) === TIMED_OUT && isSending(userId, item.id)) {
+      await withTimeout(run, SEND_SETTLE_MS);
+    }
     const left = (await loadOutbox(userId)).find((i) => i.id === item.id);
+    // Resumed because the member opened the app: Today shows the entry and
+    // its sync state, and a banner now would only repeat it (or, worse,
+    // report a send that has since landed as waiting).
+    if (AppState.currentState === "active") return "logged";
 
     const tz = profile.timezone || "UTC";
     const days = new Set(recent.map((e) => localDate(e.logged_at, tz)));
