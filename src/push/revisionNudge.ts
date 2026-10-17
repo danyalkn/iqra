@@ -2,10 +2,14 @@ import * as Notifications from "expo-notifications";
 import { SchedulableTriggerInputTypes } from "expo-notifications";
 import { Platform } from "react-native";
 
-import { fetchMyHifzHistory } from "@/data/entryReads";
+import { fetchMyHifzHistory, type HifzHistoryRow } from "@/data/entryReads";
+import { TIMED_OUT, withTimeout } from "@/data/timeout";
 import { todayLocal } from "@/lib/dates";
-import { ENTRY_META, type Mode } from "@/lib/entries";
+import { ENTRY_META, isReadingType, type Mode } from "@/lib/entries";
+import { outboxRow } from "@/lib/outbox";
 import { dueAhead, revisionPlan, type RevisionItem } from "@/lib/revisionPlan";
+import { readCache } from "@/storage/cache";
+import { loadOutbox } from "@/storage/outbox";
 import { pushEnabledKey, readPref, readRevisionHidden } from "@/storage/prefs";
 import { supabase } from "@/supabase/client";
 
@@ -168,31 +172,83 @@ function deviceTimeZone(): string {
   }
 }
 
+/** Reads here run on every foreground return and at the end of a headless
+ *  log; offline they fall back to the saved copies instead of waiting. */
+const READ_MS = 4000;
+
 /**
- * Reschedule from the server, without Today: the member's mode and
- * timezone, the whole hifz history and today's hidden rows. For a log
- * written headless from a notification button and for a return to the
- * foreground. A failed read leaves the schedule as it is (never wipes it);
- * a member no longer in hifz mode loses the nudges. Never throws.
+ * The member's mode, timezone and whole hifz history: from the server when
+ * it answers in time, else from the copies Today and the session saved
+ * (docs/NEXT-SESSION.md "Offline logging"). Entries still in the outbox are
+ * added either way, so a revision logged offline already drops its juz.
+ * Null when there is nothing to go on.
+ */
+async function revisionInputs(
+  userId: string,
+): Promise<{ mode: Mode | null; timezone: string | null; rows: HifzHistoryRow[] } | null> {
+  const [profileRes, history] = await Promise.all([
+    withTimeout(
+      Promise.resolve(
+        supabase.from("profiles").select("mode, timezone").eq("id", userId).maybeSingle(),
+      ),
+      READ_MS,
+    ),
+    withTimeout(fetchMyHifzHistory(userId), READ_MS),
+  ]);
+
+  let mode: Mode | null;
+  let timezone: string | null;
+  if (profileRes !== TIMED_OUT && !profileRes.error && profileRes.data) {
+    ({ mode, timezone } = profileRes.data as { mode: Mode | null; timezone: string | null });
+  } else if (profileRes !== TIMED_OUT && !profileRes.error && !profileRes.data) {
+    return null;
+  } else {
+    const saved = await readCache("profile", userId);
+    if (!saved) return null;
+    ({ mode, timezone } = saved);
+  }
+
+  const byId = new Map<string, HifzHistoryRow>();
+  if (history !== TIMED_OUT && !history.error && history.rows) {
+    for (const r of history.rows) byId.set(r.id, r);
+  } else {
+    const [hifz, today] = await Promise.all([readCache("hifz", userId), readCache("today", userId)]);
+    if (!hifz) return null;
+    for (const r of hifz.rows) byId.set(r.id, r);
+    // Today's window may hold hifz entries newer than the history copy.
+    for (const r of today?.entries ?? []) if (!isReadingType(r.entry_type)) byId.set(r.id, r);
+  }
+  for (const item of await loadOutbox(userId)) {
+    if (item.state !== "pending" || isReadingType(item.entry.entry_type)) continue;
+    const r = outboxRow(item);
+    byId.set(r.id, { id: r.id, entry_type: r.entry_type, juz: r.juz, logged_at: r.logged_at });
+  }
+  const rows = [...byId.values()].sort(
+    (a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime(),
+  );
+  return { mode, timezone, rows };
+}
+
+/**
+ * Reschedule without Today: the member's mode and timezone, the whole hifz
+ * history and today's hidden rows. For a log written headless from a
+ * notification button, a sync that landed a hifz entry, and every return to
+ * the foreground. Nothing to go on leaves the schedule as it is (never wipes
+ * it); a member no longer in hifz mode loses the nudges. Never throws.
  */
 export async function refreshRevisionNudges(userId: string): Promise<void> {
   try {
-    const [profileRes, history] = await Promise.all([
-      supabase.from("profiles").select("mode, timezone").eq("id", userId).maybeSingle(),
-      fetchMyHifzHistory(userId),
-    ]);
-    if (profileRes.error || !profileRes.data) return;
-    const { mode, timezone } = profileRes.data as { mode: Mode | null; timezone: string | null };
-    if (mode !== "hifz") {
+    const inputs = await revisionInputs(userId);
+    if (!inputs) return;
+    if (inputs.mode !== "hifz") {
       await cancelRevisionNudges();
       return;
     }
-    if (history.error || !history.rows) return;
     // Same fallback as Today.
-    const tz = timezone || deviceTimeZone();
+    const tz = inputs.timezone || deviceTimeZone();
     const today = todayLocal(tz);
     const hidden = await readRevisionHidden(userId, today);
-    const slots = revisionSlots(revisionPlan(history.rows, tz, today), today, hidden);
+    const slots = revisionSlots(revisionPlan(inputs.rows, tz, today), today, hidden);
     await scheduleRevisionSlots(userId, slots);
   } catch (e) {
     console.warn("Revision nudge refresh failed", e);

@@ -2,19 +2,22 @@ import * as Notifications from "expo-notifications";
 import { DEFAULT_ACTION_IDENTIFIER } from "expo-notifications";
 import { Platform } from "react-native";
 
-import { fetchMyRecentEntries } from "@/data/entryReads";
-import { insertEntry, markEntriesChanged } from "@/data/entryWrites";
-import type { Profile } from "@/lib/auth";
-import { getMyMembership } from "@/lib/data";
+import { markEntriesChanged } from "@/data/entryWrites";
+import { logContext } from "@/data/logContext";
+import { setAfterHifzSync, syncOutbox } from "@/data/sync";
+import { withTimeout } from "@/data/timeout";
 import { currentStreak, localDate } from "@/lib/dates";
 import { toNativeHref } from "@/lib/deepLinks";
 import { ENTRY_META, isReadingType, TYPES_BY_MODE, type EntryType } from "@/lib/entries";
 import { continuedEntry, parseLogAmount } from "@/lib/entryDefaults";
 import { DEFAULT_MUSHAF } from "@/lib/mushaf";
+import type { OutboxItem } from "@/lib/outbox";
 import { pagesPhrase } from "@/lib/position";
-import type { LogRow, NewEntry } from "@/lib/types";
+import type { NewEntry } from "@/lib/types";
+import { uuidv4 } from "@/lib/uuid";
+import { enqueue, loadOutbox } from "@/storage/outbox";
 import { PREF_KEYS, readPref, writePref } from "@/storage/prefs";
-import { supabase } from "@/supabase/client";
+import { readStoredSession } from "@/supabase/client";
 
 import { ACTION } from "./categories";
 import { CHANNEL_ID } from "./register";
@@ -26,6 +29,11 @@ import { refreshRevisionNudges } from "./revisionNudge";
  * taps) and the Android background task (src/push/task.ts), so a button
  * means the same thing wherever it is handled.
  */
+
+// A synced hifz entry can change tonight's revision nudge. Set here, in the
+// module the app entry loads first (index.js -> task.ts -> here), so every
+// sync, headless or not, has it.
+setAfterHifzSync(refreshRevisionNudges);
 
 export type ParsedResponse =
   /** A tap on the body (or an action we do not know): go to `href`. */
@@ -176,13 +184,22 @@ function describe(entry: NewEntry): string {
   return entry.juz != null ? `${label}, Juz ${entry.juz}` : label;
 }
 
+/** How long a tap waits for its entry to reach the server before saying it
+ *  will sync later (a background launch has seconds before suspension). */
+const SEND_WAIT_MS = 8000;
+
 /**
- * Write the entry a log button stands for, with the sheet's defaults for
+ * Log the entry a button stands for, with the sheet's defaults for
  * everything the button did not say (continuation from the last entry of
  * that type, the member's mushaf, now), then confirm with a local
- * notification ("Logged 5 pages. Streak: 12 days."). A headless run has no
- * UI for errors, so a failure is also a notification whose tap opens the
- * sheet prefilled; no retry queue (PHASE3.md: five people, keep it simple).
+ * notification. The entry goes through the outbox like one from the sheet
+ * (docs/NEXT-SESSION.md "Notification buttons offline"): queued with its own
+ * id and sent at once, so a send cut off by a suspension or a dead network
+ * is retried later into the same primary key, never written twice. Landed:
+ * "Logged 5 pages. Streak: 12 days." Still queued: "Saved. It will sync
+ * when you're back online." Only an entry that cannot be built (nothing
+ * loaded on this device yet, or not signed in) fails, and its notification
+ * opens the sheet prefilled.
  */
 export async function performLog(
   action: { type: EntryType; amount: number | null; reminderId: string | null; uid: string | null },
@@ -205,11 +222,12 @@ async function performLogClaimed(
 ): Promise<LogOutcome> {
   if (!(await claim(responseId))) return "duplicate";
   const retryHref = sheetHref(action.type, action.amount, action.reminderId);
+  let queued = false;
   try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const userId = session?.user.id;
+    // Who is signed in, from the keychain: supabase-js reports no session
+    // offline once the access token has expired, and would first spend up
+    // to half a minute retrying the refresh.
+    const userId = (await readStoredSession())?.user.id;
     if (!userId) {
       await unclaim(responseId);
       return "signedOut";
@@ -220,62 +238,60 @@ async function performLogClaimed(
       await unclaim(responseId);
       return "wrongUser";
     }
-    const [profileRes, membership] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
-      getMyMembership(supabase),
-    ]);
-    const profile = (profileRes.data as Profile | null) ?? null;
-    if (!profile || !membership) throw new Error("profile or circle unavailable");
+    const ctx = await logContext(userId);
+    if (!ctx) throw new Error("profile, circle or recent entries never loaded here");
+    const { profile, groupId, recent } = ctx;
     if (!TYPES_BY_MODE[profile.mode].includes(action.type)) {
       throw new Error(`type ${action.type} not offered in ${profile.mode} mode`);
     }
     const mush = profile.mushaf ?? DEFAULT_MUSHAF;
-    // The throwing read: a dead network must fail here, not continue from
-    // "nothing logged" and reset the bookmark or restart sabak at Juz 1.
-    const { rows: recent, error: readError } = await fetchMyRecentEntries(
-      membership.group_id,
-      userId,
-    );
-    if (readError || !recent) throw new Error("recent entries unavailable");
     // Dated at the tap, not when the request lands: iOS can suspend a
     // background launch mid-write and resume it hours later.
     const entry = { ...continuedEntry(action.type, recent, mush, action.amount), logged_at: tappedAt };
-    let { row, error } = await insertEntry(userId, membership.group_id, entry);
-    if (error || !row) {
-      // The insert may have committed with the reply lost (suspended
-      // mid-request). The tap time is to the millisecond, so a row with it
-      // is this one; reporting "couldn't log" would invite a second entry.
-      const { data: landed } = await supabase
-        .from("log_entries")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("entry_type", entry.entry_type)
-        .eq("logged_at", tappedAt)
-        .maybeSingle();
-      if (!landed) throw new Error(error ?? "insert failed");
-      row = landed as LogRow;
-      error = null;
-    }
+    const item: OutboxItem = {
+      id: uuidv4(),
+      userId,
+      groupId,
+      entry,
+      savedAt: tappedAt,
+      attempts: 0,
+      state: "pending",
+    };
+    await enqueue(item);
+    queued = true;
+    // Today and the revision nudges count it from here on, sent or not.
     markEntriesChanged();
+
+    await withTimeout(syncOutbox(userId), SEND_WAIT_MS);
+    const left = (await loadOutbox(userId)).find((i) => i.id === item.id);
 
     const tz = profile.timezone || "UTC";
     const days = new Set(recent.map((e) => localDate(e.logged_at, tz)));
-    days.add(localDate(row.logged_at, tz));
+    days.add(localDate(tappedAt, tz));
     const streak = currentStreak(days, tz, Date.now());
-    await notify(
-      `Logged ${describe(entry)}. Streak: ${streak} ${streak === 1 ? "day" : "days"}.`,
-      "/today",
-    );
+    if (!left) {
+      await notify(
+        `Logged ${describe(entry)}. Streak: ${streak} ${streak === 1 ? "day" : "days"}.`,
+        "/today",
+      );
+    } else if (left.state === "rejected") {
+      await notify("Couldn’t save that entry. Tap to see why in Iqra.", "/today");
+    } else {
+      await notify(`Saved ${describe(entry)}. It will sync when you’re back online.`, "/today");
+    }
     // A hifz log can change tonight's revision nudge (a revision drops its
-    // juz; a Sabak can move the current juz). After the confirmation so it
-    // never delays it; refreshRevisionNudges never throws, and the catch
-    // keeps a surprise out of the "Couldn't log that" path below.
-    if (!isReadingType(entry.entry_type)) {
+    // juz; a Sabak can move the current juz). A landed entry already did
+    // this inside the sync; a queued one does it from the saved copies.
+    // After the confirmation so it never delays it; never throws.
+    if (left && !isReadingType(entry.entry_type)) {
       await refreshRevisionNudges(userId).catch(() => {});
     }
     return "logged";
   } catch (e) {
     console.warn("Log from notification failed", e);
+    // Queued means it is safe on the device and will sync: never invite a
+    // second entry by calling that a failure.
+    if (queued) return "logged";
     await unclaim(responseId);
     await notify("Couldn’t log that. Tap to finish it in Iqra.", retryHref);
     return "failed";
@@ -317,7 +333,9 @@ export async function logInBackground(
     } else if (outcome === "wrongUser") {
       await notify("That reminder was for another account on this phone.", "/today");
     }
-    // "logged" and "failed" have already notified; "duplicate" is silent.
+    // "logged" and "failed" have already notified (a queued entry that hit
+    // a surprise after queueing stays silent: it will still sync);
+    // "duplicate" is silent.
   } finally {
     await Notifications.dismissNotificationAsync(id).catch(() => {});
     await Notifications.clearLastNotificationResponseAsync().catch(() => {});
