@@ -200,7 +200,7 @@ entry is logged; a DeviceActivity schedule re-applies the shield at
 profile-local midnight. Opt-in, per device, `.individual` authorization.
 Library `react-native-device-activity` (Kingstinct) with its config plugin,
 Apple Team ID and the App Group `group.com.qadamtechnologies.iqra`. Three
-extension targets (`DeviceActivityMonitor`, `ShieldConfiguration`,
+extension targets (`ActivityMonitorExtension`, `ShieldConfiguration`,
 `ShieldAction`) each need the Family Controls entitlement.
 
 Sequence:

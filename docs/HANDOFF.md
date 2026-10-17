@@ -91,7 +91,7 @@ Do these early; several are long poles.
    `docs/SCREEN-TIME.md`, then commit.
 2. **Create the App ID + app record** in App Store Connect under the org.
 3. **File the Family Controls (Distribution) requests on day one.** Four of
-   them: the app bundle id plus `.DeviceActivityMonitor`,
+   them: the app bundle id plus `.ActivityMonitorExtension`,
    `.ShieldConfiguration`, `.ShieldAction`. Must be submitted by the org's
    **Account Holder**, not an Admin. Form and wording in `docs/SCREEN-TIME.md`.
    Expect days to weeks; open a DTS ticket after two silent weeks.

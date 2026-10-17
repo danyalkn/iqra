@@ -20,9 +20,14 @@ to the "Request the Family Controls (Distribution) capability" page. Notes:
 - Submit as the org's **Account Holder**. Admins get rejected or ignored.
 - One request per bundle id. Four total:
   - `com.qadamtechnologies.iqra` (the app)
-  - `com.qadamtechnologies.iqra.DeviceActivityMonitor`
+  - `com.qadamtechnologies.iqra.ActivityMonitorExtension`
   - `com.qadamtechnologies.iqra.ShieldConfiguration`
   - `com.qadamtechnologies.iqra.ShieldAction`
+- The extension ids are the ones `react-native-device-activity` 0.6.1
+  generates: `<ios.bundleIdentifier>.<target folder>`, and its folders are
+  `ActivityMonitorExtension`, `ShieldConfiguration`, `ShieldAction`
+  (checked in the package source 2026-10-17; `.DeviceActivityMonitor` is
+  `expo-app-blocker`'s name, a different library). Ids are case-sensitive.
 - All four must share one App Group (`group.com.qadamtechnologies.iqra`), or provisioning
   fails silently for the missing target.
 - After approval: Identifiers -> each App ID -> Additional Capabilities ->
