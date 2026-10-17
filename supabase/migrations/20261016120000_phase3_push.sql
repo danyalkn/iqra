@@ -25,8 +25,14 @@
 -- `category` line and the mode lookup added. No em dashes in any copy.
 -- ════════════════════════════════════════════════════════════════════════
 
--- ── 1. send_push is server-only ─────────────────────────────────────────────
+-- ── 1. send_push and the sweeps are server-only ─────────────────────────────
+-- Checked on the live database 2026-10-16: send_push, cron_send_reminders,
+-- cron_lapsed_nudges and cron_weekly_recap all still carried PUBLIC execute
+-- (only the day-reminder and streak-grace jobs had been revoked).
 revoke execute on function public.send_push(uuid[], jsonb) from public, anon, authenticated;
+revoke execute on function public.cron_send_reminders() from public, anon, authenticated;
+revoke execute on function public.cron_lapsed_nudges() from public, anon, authenticated;
+revoke execute on function public.cron_weekly_recap() from public, anon, authenticated;
 
 -- ── 2a. Category for a reminder ─────────────────────────────────────────────
 create or replace function public.push_category(p_mode text, p_entry_type text)

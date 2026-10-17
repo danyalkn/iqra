@@ -46,3 +46,6 @@ example
 .env
 *.apk
 *.ipa
+
+# Supabase CLI link state (per machine)
+supabase/.temp/
