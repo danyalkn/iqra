@@ -41,6 +41,7 @@ import { Leaderboard } from "@/components/stats/Leaderboard";
 import { MonthBrowser } from "@/components/stats/MonthBrowser";
 import { PagesBarChart } from "@/components/stats/PagesBarChart";
 import { ProgressCard } from "@/components/stats/ProgressCard";
+import { ReadingWeeksCard } from "@/components/stats/ReadingWeeksCard";
 import { RecapCard } from "@/components/stats/RecapCard";
 import { EmptyNote, SectionCard } from "@/components/stats/SectionCard";
 import { StatTile } from "@/components/stats/StatTile";
@@ -66,7 +67,7 @@ import {
   weekDatesUpTo,
   weekRangeLabel,
 } from "@/lib/dates";
-import type { Mode } from "@/lib/entries";
+import { isReadingType, type Mode } from "@/lib/entries";
 import {
   buildAdvice,
   buildPersonalInsights,
@@ -451,6 +452,8 @@ export default function StatsScreen() {
 
   const totalEntries = chartEntries.length;
   const noteCount = useMemo(() => mine.filter((e) => e.notes).length, [mine]);
+  // A memorizer who never logs plain reading has no use for the reading card.
+  const readsToo = useMemo(() => mine.some((e) => isReadingType(e.entry_type)), [mine]);
 
   // ── Group khatmah (all-time, every entry type) ──────────────────────────
   // pages_equiv already converts juz/quarter/hizb → pages; page amounts are
@@ -978,6 +981,11 @@ export default function StatsScreen() {
             {/* ── MINE (hifz): Sabak / Sabak Para / Dhor, in pages ── */}
             {!reading && scope === "mine" && (
               <HifzBreakdownCard rows={mine} tz={tz} today={today} />
+            )}
+
+            {/* ── MINE: juz of reading per week (memorizers who read too) ── */}
+            {scope === "mine" && (reading || readsToo) && (
+              <ReadingWeeksCard rows={mine} tz={tz} today={today} hifz={!reading} />
             )}
 
             {/* ── GROUP: the khatmah we're on + history of past ones ── */}
