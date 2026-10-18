@@ -36,6 +36,7 @@ import { Radius, Type } from "@/constants/theme";
 import {
   deleteEntry,
   markEntriesChanged,
+  NEEDS_CONNECTION,
   takeEntriesChanged,
   updateEntry,
 } from "@/data/entryWrites";
@@ -183,6 +184,10 @@ const SYNCED_KEEP_MS = 2 * 60 * 1000;
 
 /** How long a deep link waits on the saved copy for the server's answer. */
 const SEED_WAIT_MS = 4000;
+
+/** A read still out after this long, with the saved copy on screen, reads
+ *  as offline. */
+const SLOW_READ_MS = 10_000;
 
 function entriesWord(n: number): string {
   return n === 1 ? "1 entry" : `${n} entries`;
@@ -371,11 +376,18 @@ export default function TodayScreen() {
     }
     // A day inside the 120-day window: newer rows come from `entries`.
     const cutoff = new Date(Date.now() - 119 * 24 * 60 * 60 * 1000).toISOString();
+    // Offline with an expired token the reads take half a minute to fail
+    // (supabase-js retries the refresh first). With the saved copy on screen,
+    // say "Offline" after a while; an answer that lands clears it.
+    const slow = setTimeout(() => {
+      if (seq === loadSeq.current && seededReady.current && !landed.current) setOffline(true);
+    }, SLOW_READ_MS);
     return Promise.all([
       fetchMyRecentEntries(groupId, userId),
       fetchMyDayReminders(userId, todayLocal(tz), tomorrowLocal(tz)),
       fetchMyHifzHistory(userId),
     ]).then(([recent, reminders, history]) => {
+      clearTimeout(slow);
       if (seq !== loadSeq.current) return;
       // Its own failure never fails the load: the card falls back to the
       // window and the nudges stay as scheduled (see `plan` below).
@@ -418,6 +430,7 @@ export default function TodayScreen() {
       }
       setLoadState("ready");
       setOffline(false);
+      setError((e) => (e === NEEDS_CONNECTION ? null : e));
       // A read that landed means the connection is back: send what waits.
       void syncOutbox(userId);
     });
@@ -431,6 +444,7 @@ export default function TodayScreen() {
     setOffline,
     setHifzHistory,
     setFirstReadSettled,
+    setError,
   ]);
 
   useEffect(() => {
@@ -512,14 +526,15 @@ export default function TodayScreen() {
   const refused = queued.filter((i) => i.state === "rejected");
   // Logged offline and not sent yet (a first send still in flight is just
   // "saving", not waiting).
+  // Once a send has failed, a retry in flight still reads as waiting (the
+  // emulator test saw rows flicker to "saving" on every backoff tick).
   const waitingCount = queued.filter(
-    (i) => i.state === "pending" && !i.discard && i.attempts > 0 && !outbox.sending.has(i.id),
+    (i) => i.state === "pending" && !i.discard && i.attempts > 0,
   ).length;
   const syncMark = (id: string): "saving" | "waiting" | undefined => {
     const item = queuedById.get(id);
     if (!item) return undefined;
-    if (outbox.sending.has(id) || item.attempts === 0) return "saving";
-    return "waiting";
+    return item.attempts === 0 ? "saving" : "waiting";
   };
 
   // A sent entry joins the server rows before it leaves the queue, so it
@@ -787,8 +802,20 @@ export default function TodayScreen() {
     // was sent meanwhile (and has joined the server rows); delete that.
     recentlySynced.current.delete(id);
     if (userId && queuedById.has(id) && (await discardQueued(userId, id))) return;
+    const original = serverEntries.find((e) => e.id === id);
     setEntries((p) => p.filter((e) => e.id !== id));
     const error = await deleteEntry(id);
+    if (error === NEEDS_CONNECTION) {
+      // No answer at all: offline the request never left, so the row is
+      // still there. Put it back now rather than wait for a read that
+      // cannot land (it would stay hidden yet keep counting for "Start
+      // from"). The next read corrects the rare lost-reply case.
+      if (original) setEntries((p) => (p.some((e) => e.id === id) ? p : [original, ...p]));
+      setError(error);
+      failHaptic();
+      markEntriesChanged();
+      return;
+    }
     if (error) {
       // An error does not mean the row survived: the request can fail after
       // the server committed (the simulator check saw a deleted row come back
