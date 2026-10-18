@@ -19,7 +19,7 @@
  *   - Animation stays off (the web set isAnimationActive={false}; victory's
  *     animated paths leak, see docs/HANDOFF.md § Charts).
  */
-import { DashPathEffect } from "@shopify/react-native-skia";
+import { DashPathEffect, Line as SkiaLine, vec } from "@shopify/react-native-skia";
 import { useMemo } from "react";
 import { View } from "react-native";
 import { Bar, CartesianChart } from "victory-native";
@@ -45,6 +45,7 @@ export function PagesBarChart({
   maxBarWidth,
   dashedGrid = false,
   suffix,
+  goal,
 }: PagesBarChartProps) {
   const colors = useChartColors();
   const font = useChartFont(10);
@@ -57,7 +58,12 @@ export function PagesBarChart({
   const xTicks = useMemo(() => data.map((_, i) => i), [data]);
   const max = data.reduce((m, d) => Math.max(m, d.pages), 0);
   // All-zero data still gets a [0, 1] axis instead of a collapsed scale.
-  const yTicks = useMemo(() => integerTicks(Math.max(1, max), 4), [max]);
+  // A goal line gets headroom above it, or it would merge with the top
+  // grid line whenever every bar sits under it.
+  const yTicks = useMemo(
+    () => integerTicks(Math.max(1, max, goal != null ? goal * 1.5 : 0), 4),
+    [max, goal],
+  );
   const top = yTicks[yTicks.length - 1];
   const n = data.length;
   // Room for half a bar (plus a hair) at both ends of the axis.
@@ -103,7 +109,7 @@ export function PagesBarChart({
         chartPressState={state}
         chartPressConfig={CHART_PRESS_CONFIG}
       >
-        {({ points, chartBounds }) => {
+        {({ points, chartBounds, yScale }) => {
           // chartBounds spans the padded axis; the bar centres sit `edge`
           // inside each end, so the centre-to-centre slot excludes them.
           const span = chartBounds.right - chartBounds.left;
@@ -127,6 +133,17 @@ export function PagesBarChart({
                 barWidth={barWidth}
                 roundedCorners={{ topLeft: 6, topRight: 6 }}
               />
+              {/* Over the bars, so a bar past the goal still shows it. */}
+              {goal != null && (
+                <SkiaLine
+                  p1={vec(chartBounds.left, yScale(goal))}
+                  p2={vec(chartBounds.right, yScale(goal))}
+                  color={colors.tick}
+                  strokeWidth={1.5}
+                >
+                  <DashPathEffect intervals={[5, 4]} />
+                </SkiaLine>
+              )}
             </>
           );
         }}

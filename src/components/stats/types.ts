@@ -55,6 +55,9 @@ export type PagesBarChartProps = {
   dashedGrid?: boolean;
   /** Tooltip unit after the value. */
   suffix?: string;
+  /** A dashed reference line at this value (the reading card's juz a
+   *  week). The y axis grows past it so the line never sits on the top. */
+  goal?: number;
 };
 
 export type ProgressCardProps = {
