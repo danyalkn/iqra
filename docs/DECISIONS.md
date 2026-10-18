@@ -150,6 +150,12 @@ exists but stays unscheduled (superseded by the lapse nudge).
 - Insights engine is `src/lib/insights.ts` (pure, shared). Personal scope
   only, see "No showing off".
 - Chart ramp: Sabak -> Sabak Para -> Dhor is one hue, new to oldest.
+- **Reading per week (owner, 2026-10-18):** Insights (Mine) shows juz of
+  reading per calendar week, last 8 weeks, against a dashed line at one juz
+  a week. Only Reading (and legacy Revising) counts, never Sabak, Sabak Para
+  or Dhor. A juz is 20 `pages_equiv`. The average covers finished weeks
+  only, from the week of the first reading entry. Shown to readers, and to
+  memorizers who have logged any reading.
 
 ## Design
 

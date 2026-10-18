@@ -552,6 +552,10 @@ once Apple approves the entitlement; do not block Phase 3 on it.
   `SyncController.tsx`. The full design and its decisions are in
   `docs/NEXT-SESSION.md` "Offline logging: what was built". No change to
   any existing shared-lib file.
+- Reading per week (2026-10-18): `src/lib/readingWeeks.ts` is a native-only
+  shared-lib addition (pure; the web is frozen, nothing to mirror). It feeds
+  `ReadingWeeksCard` on Insights (Mine): juz of Reading/Revising per week
+  against a 1-juz line. `PagesBarChart` gained an optional `goal` line.
 - Ultracode: good for Phase 1 and 2 (independent screens). Not for Phase 0,
   3, or 4, which need one consistent thread of decisions.
 - Model guidance from the owner (revised 2026-10-16): the main session runs
