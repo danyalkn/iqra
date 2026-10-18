@@ -189,6 +189,11 @@ const SEED_WAIT_MS = 4000;
  *  as offline. */
 const SLOW_READ_MS = 10_000;
 
+/** While the saved copy is on screen, how often Today tries the server
+ *  again, so "Offline" clears by itself once the connection is back (the
+ *  read that lands also sends what waits). */
+const OFFLINE_RETRY_MS = 30_000;
+
 function entriesWord(n: number): string {
   return n === 1 ? "1 entry" : `${n} entries`;
 }
@@ -450,6 +455,17 @@ export default function TodayScreen() {
   useEffect(() => {
     void loadToday();
   }, [loadToday]);
+
+  // Offline: try again now and then while the app is on screen. Nothing
+  // else re-reads when no entry waits to send (Android emulator test: the
+  // line stayed up after reconnecting until a pull to refresh).
+  useEffect(() => {
+    if (!offline) return;
+    const timer = setInterval(() => {
+      if (AppState.currentState === "active") void loadToday();
+    }, OFFLINE_RETRY_MS);
+    return () => clearInterval(timer);
+  }, [offline, loadToday]);
 
   // The saved copy follows the list (a read, a sent entry, an edit), so an
   // offline launch or a notification button continues from the latest rows
