@@ -149,11 +149,39 @@ never the real circle).
 
 ### Offline logging: what was built (2026-10-17)
 
-Code complete in commits 8c1a568..4a56f82, reviewed twice (Opus: 2 high
+Code complete in commits 8c1a568..9582fdc, reviewed twice (Opus: 2 high
 and 5 medium findings, then 5 smaller ones on the fixes; all fixed in the
 `fix(...)` commits after 6db970d), migration 20261017180000 applied and
-recorded. Shipped 2026-10-17 by EAS Update (iOS production group
-4e807b4b, Android preview group 2ca0201d).
+recorded. Shipped 2026-10-17 by EAS Update; latest groups: iOS production
+b464b17c, Android preview 6249efe3 (commit 9582fdc).
+
+**Device test, simulated (owner: "Just simulate all of it", 2026-10-17)**,
+run by Sonnet agents with throwaway accounts in the demo circle (all
+deleted, zero rows left):
+- iOS Simulator, dev client with the unreachable-URL trick: offline log
+  from +, continuation, "Waiting to sync", sync exactly once with
+  `offline_logged_at`, the sign-out warning: pass. It found two bugs, both
+  fixed: every 3 AM refusal was classed as a plain refusal (d0570cd), and
+  a button tap was lost when iOS suspended the app ~0.7 s after the tap
+  with only the dedupe mark written (7dcbde8: queue from saved copies
+  first, mark and entry in one write). This fits the owner's two empty
+  test pushes.
+- iOS Simulator, local Release build (embedded bundle, so a killed app
+  launches in the background like TestFlight): 3 AM card with Log for
+  today, warm and killed-app button taps (one row each, replays open no
+  second sheet): pass. iOS froze the killed-app launch ~1.1 s in; a late
+  "will sync" banner after that freeze is fixed (3b81caa). A kill in the
+  first ~0.6 to 0.9 s of a cold launch, before JS runs, still loses the tap
+  (nothing written, so no duplicate); only native code could close it.
+  Lock-screen action buttons are not reachable by idb, so owner check 1
+  ran from the home-screen banner with the app killed, not the lock
+  screen.
+- Android emulator, release APK + EAS update, real airplane mode: offline
+  cold launch, offline log and edit, kill while offline, sync once on
+  reconnect (also without opening the app), discard on sign-out never
+  reaching the server, and an offline launch with a token over an hour
+  old (signed in on saved data in ~6 s): pass. Three display issues it
+  found are fixed (9582fdc).
 
 Simulator-verified 2026-10-17 with a throwaway account in the demo circle
 (deleted afterwards, zero rows left): online log, continuation, edit and
@@ -213,11 +241,8 @@ Decisions taken while building, refining the plan above:
   the outbox and every saved copy. A user change (e.g. a dead refresh
   token) clears the saved copies but keeps that member's outbox for when
   they sign back in.
-- Accepted gaps from the second review: a button still writes its
-  dedupe claim before its (at most 1.5 s, saved copies present) look at
-  the network, so an iOS suspension in exactly that window loses the tap
-  silently; queueing from saved copies before any network call would close
-  it if the phone test shows losses. On a cold start slower than 4 s a
+- Accepted gaps from the second review (the button-claim gap it listed is
+  closed by 7dcbde8). On a cold start slower than 4 s a
   deep link opens on the saved copy. A timed-out sign-out whose supabase-js
   call finishes after a different member signs in could revoke that
   member's session (needs a sign-in within seconds; not handled).
@@ -240,6 +265,12 @@ Decisions taken while building, refining the plan above:
    `log_entries`. Two test pushes on 2026-10-17 20:14 and 20:18 UTC wrote
    nothing; the owner had not said whether they tapped. If this state loses
    writes, PHASE4.md option B (hold a background task, native, 1.1.0).
+   **Simulated 2026-10-17** (Release build on the simulator, home-screen
+   banner, app killed): the entry lands once, or is queued and lands on
+   the next open when iOS freezes the launch mid-send. The likely cause of
+   the two empty pushes (mark written, entry not yet queued, app
+   suspended) is fixed in 7dcbde8. Still unconfirmed on the real lock
+   screen; option B remains the fix if the phone ever shows a lost tap.
 2. **Revision nudge**: confirm the 8 PM "Revision suggestion" fires only
    when something due is still unrevised, and not after logging it.
 3. **Family Controls (Distribution) requests**: four, filed by the Account
