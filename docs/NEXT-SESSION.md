@@ -149,11 +149,11 @@ never the real circle).
 
 ### Offline logging: what was built (2026-10-17)
 
-Code complete in commits 8c1a568..9582fdc, reviewed twice (Opus: 2 high
+Code complete in commits 8c1a568..d080486, reviewed twice (Opus: 2 high
 and 5 medium findings, then 5 smaller ones on the fixes; all fixed in the
 `fix(...)` commits after 6db970d), migration 20261017180000 applied and
 recorded. Shipped 2026-10-17 by EAS Update; latest groups: iOS production
-b464b17c, Android preview 6249efe3 (commit 9582fdc).
+6b0ef37e, Android preview 8cfad79f (commit d080486).
 
 **Device test, simulated (owner: "Just simulate all of it", 2026-10-17)**,
 run by Sonnet agents with throwaway accounts in the demo circle (all
@@ -181,7 +181,12 @@ deleted, zero rows left):
   reconnect (also without opening the app), discard on sign-out never
   reaching the server, and an offline launch with a token over an hour
   old (signed in on saved data in ~6 s): pass. Three display issues it
-  found are fixed (9582fdc).
+  found are fixed (9582fdc), and the offline line now clears by itself
+  after reconnecting (d080486; re-run: line gone within 14 s, waiting
+  entry landed once within 11 s, after 2 and 6.5 minute outages).
+- Not simulatable, still the owner's phone if ever wanted: the real lock
+  screen, real APNs on the TestFlight build, the revision nudge (the
+  simulator never gets the per-user push flag that gates it).
 
 Simulator-verified 2026-10-17 with a throwaway account in the demo circle
 (deleted afterwards, zero rows left): online log, continuation, edit and
