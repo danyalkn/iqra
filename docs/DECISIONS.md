@@ -143,6 +143,14 @@ exists but stays unscheduled (superseded by the lapse nudge).
   (re)join resyncs via REST. Realtime timestamps can arrive WITHOUT a tz
   offset and must be parsed as UTC. See `reference/web-pwa/app/(app)/chat/ChatClient.tsx`
   for the reconnect logic that was fought through; port it, do not rewrite.
+- **Read receipts never move the conversation (owner, 2026-10-18).** Each
+  member's avatar sits in a right-hand gutter beside the bottom of the last
+  message they read, out of the layout flow, and fades in where it lands.
+  Receipts do not end a bubble group. Do not put them back in a row under
+  the bubble: that grew and shrank rows on every read and jerked the list.
+- **The way out of the chat is on screen (owner, 2026-10-18).** The keyboard
+  covers the tab bar, so while the message field has focus a "Hide
+  keyboard" chevron sits left of it. The swipe-down stays as well.
 
 ## Stats
 
