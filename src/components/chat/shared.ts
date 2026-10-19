@@ -23,6 +23,9 @@ export const SWIPE_REPLY_TRIGGER = 52;
 export const SWIPE_REPLY_MAX = 80;
 /** Largest "reveal times" drag to the left (points). */
 export const REVEAL_MAX = 64;
+/** The list's right padding. Each row keeps its own receipt gutter inside
+ *  it, and the revealed time box starts just past it, at the screen edge. */
+export const LIST_PAD_RIGHT = 8;
 
 /** "@all" mentions every member, so it notifies even people who muted chat. */
 export const ALL_TOKEN = "all";

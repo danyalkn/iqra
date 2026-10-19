@@ -17,7 +17,7 @@ import type { GroupMember, Message, Reaction } from "@/lib/types";
 
 import type { Anchor } from "./ActionOverlay";
 import { MessageRow, type RowMeta } from "./MessageRow";
-import { GAP_MS, isTemp, replyCaption } from "./shared";
+import { GAP_MS, isTemp, LIST_PAD_RIGHT, replyCaption } from "./shared";
 
 /** "Near the bottom" for auto-scroll on others' messages (web: 120px), kept
  *  current in onScroll. */
@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
   // the keyboard, so neither takes space inside this scroll view.
   // The right side is narrower because every row keeps its own receipt
   // gutter (MessageRow), which already spaces the bubbles off the edge.
-  content: { paddingLeft: 16, paddingRight: 8, paddingVertical: 16 },
+  content: { paddingLeft: 16, paddingRight: LIST_PAD_RIGHT, paddingVertical: 16 },
   // Web: m-auto max-w-xs text-center.
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   emptyTitle: { fontWeight: "600", textAlign: "center", maxWidth: 320 },

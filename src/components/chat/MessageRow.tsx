@@ -27,7 +27,13 @@ import type { GroupMember, Message, Reaction } from "@/lib/types";
 import type { Anchor } from "./ActionOverlay";
 import { MessageBody } from "./MessageBody";
 import { ReactionChips } from "./ReactionChips";
-import { LONG_PRESS_MS, REVEAL_MAX, SWIPE_REPLY_MAX, SWIPE_REPLY_TRIGGER } from "./shared";
+import {
+  LIST_PAD_RIGHT,
+  LONG_PRESS_MS,
+  REVEAL_MAX,
+  SWIPE_REPLY_MAX,
+  SWIPE_REPLY_TRIGGER,
+} from "./shared";
 
 /** Everything the list derives for one message (the per-row locals of the
  *  web's messages.map), computed once in MessageList so a recycled row only
@@ -436,12 +442,15 @@ const styles = StyleSheet.create({
   body: { fontSize: 15, lineHeight: 20 },
   // Web: absolute left-[calc(100%+1rem)] w-16 pr-3 text-right, centered on
   // the line; a full-height box centers without a percentage transform.
+  // Pinned from the right edge rather than left: "100%": a percentage
+  // resolves against the line's width minus its receipt gutter padding,
+  // which left the box 16pt on screen at rest. This puts its left edge at
+  // the screen edge, as the web's 1rem past a 16px-padded scroller did.
   timeWrap: {
     position: "absolute",
-    left: "100%",
+    right: -(64 + LIST_PAD_RIGHT),
     top: 0,
     bottom: 0,
-    marginLeft: 16,
     width: 64,
     paddingRight: 12,
     justifyContent: "center",
