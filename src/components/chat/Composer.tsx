@@ -1,7 +1,8 @@
-import { Send, X } from "lucide-react-native";
+import { ChevronDown, Send, X } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
 import { Elevation, Radius, Type } from "@/constants/theme";
@@ -44,6 +45,11 @@ function dismissKeyboard() {
  *   the order differs by platform, so both handlers re-run the query with
  *   the latest pair and the second one wins.
  * Keyboard avoidance belongs to the screen; this is a plain View.
+ *
+ * The keyboard covers the tab bar, and a member who did not know the
+ * swipe-down was stuck in the chat (owner, 2026-10-18). While the field has
+ * focus a "Hide keyboard" chevron sits left of it, so the way back to the
+ * tabs is on screen; the swipe-down still works for those who know it.
  */
 export function Composer({
   groupName,
@@ -59,6 +65,8 @@ export function Composer({
   const inputRef = useRef<ComponentRef<typeof TextInput>>(null);
   const [draft, setDraft] = useState("");
   const [mentionQuery, setMentionQuery] = useState<MentionQuery | null>(null);
+  // Field focused = keyboard up (the interactive swipe-down blurs it too).
+  const [focused, setFocused] = useState(false);
   // Controlled only for the render after a mention pick (the web's
   // caretToSet + setSelectionRange); released on the next caret or text event.
   const [selection, setSelection] = useState<{ start: number; end: number } | undefined>();
@@ -216,12 +224,31 @@ export function Composer({
         )}
 
         <View style={styles.fieldRow}>
+          {focused && (
+            <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(120)}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Hide keyboard"
+                hitSlop={6}
+                onPress={dismissKeyboard}
+                style={({ pressed }) => [
+                  styles.hideBtn,
+                  { backgroundColor: c.surface2 },
+                  pressed && styles.sendPressed,
+                ]}
+              >
+                <ChevronDown size={20} strokeWidth={2.25} color={c.muted} />
+              </Pressable>
+            </Animated.View>
+          )}
           <TextInput
             ref={inputRef}
             value={draft}
             onChangeText={onChangeText}
             onSelectionChange={(e) => onSelectionChange(e.nativeEvent.selection.start)}
             selection={selection}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             multiline
             submitBehavior="newline"
             placeholder={`Message ${groupName}…`}
@@ -307,6 +334,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     // The one-line field is 42pt (10 + 22 + 10) and the button 40pt, so a
     // bottom-aligned button sat 1pt low. Lift it 1pt to share the centre line.
+    marginBottom: 1,
+  },
+  // Same 40pt circle and 1pt lift as Send, so the row shares one centre line.
+  hideBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 1,
   },
   sendDisabled: { opacity: 0.4 },
