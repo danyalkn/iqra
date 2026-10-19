@@ -143,16 +143,11 @@ export function MessageList({
         : Infinity;
       const showStamp = gapPrev >= GAP_MS;
       const receipts = receiptsByMsg.get(msg.id) ?? [];
-      // Group consecutive same-sender messages (within the hour). A
-      // receipts row ends a group: its avatars sit between bubbles,
-      // so the corners must close rather than claim connection.
-      const sameAsPrev =
-        !!prev &&
-        prev.user_id === msg.user_id &&
-        !showStamp &&
-        (receiptsByMsg.get(prev.id)?.length ?? 0) === 0;
-      const sameAsNext =
-        !!next && next.user_id === msg.user_id && gapNext < GAP_MS && receipts.length === 0;
+      // Group consecutive same-sender messages (within the hour). Receipts
+      // no longer end a group: they sit in the gutter beside the bubble,
+      // not between bubbles, and a read moving must not reshape corners.
+      const sameAsPrev = !!prev && prev.user_id === msg.user_id && !showStamp;
+      const sameAsNext = !!next && next.user_id === msg.user_id && gapNext < GAP_MS;
       const pending = isTemp(msg.id);
       const original = msg.reply_to ? messageMap.get(msg.reply_to) : undefined;
       map.set(msg.id, {
@@ -346,7 +341,9 @@ const styles = StyleSheet.create({
   // breathing room under the last bubble: the list is a flex sibling ABOVE
   // the composer (not under it) inside a KeyboardAvoidingView that pads for
   // the keyboard, so neither takes space inside this scroll view.
-  content: { paddingHorizontal: 16, paddingVertical: 16 },
+  // The right side is narrower because every row keeps its own receipt
+  // gutter (MessageRow), which already spaces the bubbles off the edge.
+  content: { paddingLeft: 16, paddingRight: 8, paddingVertical: 16 },
   // Web: m-auto max-w-xs text-center.
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   emptyTitle: { fontWeight: "600", textAlign: "center", maxWidth: 320 },

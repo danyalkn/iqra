@@ -1,6 +1,6 @@
 import * as Clipboard from "expo-clipboard";
 import { Reply } from "lucide-react-native";
-import { useRef, type ComponentRef } from "react";
+import { useEffect, useRef, type ComponentRef } from "react";
 import {
   Keyboard,
   Pressable,
@@ -72,6 +72,15 @@ export type MessageRowProps = {
   onQuotePress: (mid: string) => void;
 };
 
+/** Read-receipt avatar size, and the right-hand gutter every row keeps for
+ *  them: the 2px canvas ring around the avatar plus a gap to the bubble. */
+const RECEIPT_AVATAR = 16;
+const RECEIPT_RING = RECEIPT_AVATAR + 4;
+const RECEIPT_GUTTER = RECEIPT_RING + 4;
+/** Several members stopped at one message stack upward, overlapping. */
+const RECEIPT_OVERLAP = 8;
+const RECEIPT_FADE_MS = 220;
+
 /** Screen-reader stand-ins for the long press, swipe and Copy menu. */
 const A11Y_ACTIONS = [
   { name: "react", label: "React" },
@@ -86,9 +95,15 @@ function withAlpha(hex: string, alpha: number): string {
 }
 
 /**
- * One message: time stamp, reply context, the bubble line (avatar, bubble,
- * revealed time) and the read-receipt row. Ported from the messages.map in
+ * One message: time stamp, reply context and the bubble line (avatar,
+ * bubble, revealed time, read receipts). Ported from the messages.map in
  * reference/web-pwa/app/(app)/chat/ChatClient.tsx.
+ *
+ * Read receipts differ from the web on purpose: the web put them in a row
+ * under the bubble, which here grew and shrank two rows every time someone
+ * read, jerking the list under the reader (owner, 2026-10-18). They sit in a
+ * gutter beside the bubble's bottom instead, out of the layout flow, so a
+ * frontier moving changes no row height and only the avatar moves.
  *
  * Gestures, where native differs from the web's touch handlers:
  * - A pan on the row replaces the list-level touchstart/move/end: dragging
@@ -325,27 +340,42 @@ export function MessageRow({
                 {time}
               </Text>
             </View>
+
+            {/* IG-style read receipts: tiny avatars of everyone whose read
+                frontier stops at this message, in the gutter by the bubble's
+                bottom (see the note above the component). */}
+            {receipts.length > 0 && (
+              <View pointerEvents="none" style={styles.receipts}>
+                {receipts.map((m, i) => (
+                  <ReceiptAvatar key={m.user_id} member={m} stacked={i > 0} />
+                ))}
+              </View>
+            )}
           </View>
 
-          {/* IG-style read receipts: tiny avatars of everyone whose read
-              frontier stops at this message, right-aligned. */}
-          {receipts.length > 0 && (
-            <View style={[styles.receipts, { marginTop: reactions.length > 0 ? 16 : 4 }]}>
-              {receipts.map((m, i) => (
-                <View
-                  key={m.user_id}
-                  // ring-2 ring-canvas: a 2px canvas ring around each avatar,
-                  // drawn as padding so the 18px image is not shrunk by a border.
-                  style={[styles.ring, { backgroundColor: c.canvas }, i > 0 && styles.overlap]}
-                >
-                  <Avatar name={m.display_name} src={m.avatar_url} size={18} />
-                </View>
-              ))}
-            </View>
-          )}
         </Animated.View>
       </Animated.View>
     </GestureDetector>
+  );
+}
+
+/** One receipt. Fades in where it lands, so a frontier moving reads as the
+ *  avatar stepping to the newer message rather than blinking there. */
+function ReceiptAvatar({ member, stacked }: { member: GroupMember; stacked: boolean }) {
+  const c = useTheme();
+  const opacity = useSharedValue(0);
+  useEffect(() => {
+    opacity.set(withTiming(1, { duration: RECEIPT_FADE_MS, easing: Easing.out(Easing.cubic) }));
+  }, [opacity]);
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: opacity.get() }));
+  return (
+    // ring-2 ring-canvas: a 2px canvas ring around each avatar, drawn as
+    // padding so the image is not shrunk by a border.
+    <Animated.View
+      style={[styles.ring, { backgroundColor: c.canvas }, stacked && styles.stacked, fadeStyle]}
+    >
+      <Avatar name={member.display_name} src={member.avatar_url} size={RECEIPT_AVATAR} />
+    </Animated.View>
   );
 }
 
@@ -354,7 +384,7 @@ const styles = StyleSheet.create({
   stampWrap: { alignItems: "center", paddingTop: 4, paddingBottom: 8 },
   stamp: { fontSize: 11, lineHeight: 14, fontWeight: "500" },
   replyCtx: { paddingTop: 4 },
-  replyCtxMine: { alignItems: "flex-end", paddingRight: 4 },
+  replyCtxMine: { alignItems: "flex-end", paddingRight: 4 + RECEIPT_GUTTER },
   // pl-9: clears the 28px avatar column plus its gap.
   replyCtxTheirs: { alignItems: "flex-start", paddingLeft: 36 },
   captionRow: {
@@ -375,7 +405,7 @@ const styles = StyleSheet.create({
   },
   quoteMine: { marginRight: 4 },
   quoteTheirs: { marginLeft: 4 },
-  line: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
+  line: { flexDirection: "row", alignItems: "flex-end", gap: 8, paddingRight: RECEIPT_GUTTER },
   lineMine: { justifyContent: "flex-end" },
   lineTheirs: { justifyContent: "flex-start" },
   affordance: {
@@ -417,7 +447,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   time: { fontSize: 11, lineHeight: 14, textAlign: "right", fontVariant: ["tabular-nums"] },
-  receipts: { flexDirection: "row", justifyContent: "flex-end", paddingRight: 4 },
-  ring: { width: 22, height: 22, borderRadius: 11, padding: 2 },
-  overlap: { marginLeft: -6 },
+  // Bottom-aligned with the bubble (the line aligns flex-end); the first
+  // receipt sits lowest and the rest stack upward over it.
+  receipts: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    width: RECEIPT_RING,
+    flexDirection: "column-reverse",
+  },
+  ring: {
+    width: RECEIPT_RING,
+    height: RECEIPT_RING,
+    borderRadius: RECEIPT_RING / 2,
+    padding: 2,
+  },
+  stacked: { marginBottom: -RECEIPT_OVERLAP },
 });
