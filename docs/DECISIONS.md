@@ -165,6 +165,9 @@ exists but stays unscheduled (superseded by the lapse nudge).
   turn it off in Settings.
 - iOS-feel everywhere: native tab bar, sheets that swipe down to dismiss,
   wheel pickers for amounts, haptics on log.
+- The tab bar never minimizes on scroll (2026-10-18). iOS 26 can shrink it
+  to a single icon while scrolling down; the owner found that read as the
+  bar disappearing, so it stays full size on every screen.
 - No em dashes in any copy.
 
 ## Operations
