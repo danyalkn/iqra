@@ -9,7 +9,9 @@ import { useTheme } from "@/hooks/use-theme";
  * its page title, and adds Profile as the fifth tab (owner decision
  * 2026-10-16). SF Symbols on iOS, Material Symbols on Android (Lucide
  * stays for in-screen icons). The bar itself is the system one; do not
- * restyle it.
+ * restyle it, and keep it fully visible while scrolling (owner decision
+ * 2026-10-18: the iOS 26 shrink-to-one-icon behaviour read as the bar
+ * disappearing).
  */
 export default function TabsLayout() {
   const c = useTheme();
@@ -22,7 +24,7 @@ export default function TabsLayout() {
       shadowColor={c.border}
       indicatorColor={c.accentTint}
       rippleColor={c.accentTint}
-      minimizeBehavior="onScrollDown"
+      minimizeBehavior="never"
     >
       <NativeTabs.Trigger name="today">
         <NativeTabs.Trigger.Label>Today</NativeTabs.Trigger.Label>
