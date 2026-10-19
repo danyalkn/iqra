@@ -160,6 +160,15 @@ export function useChatSync({
           next.push(r);
         }
       }
+      // No change -> keep the same reference, as syncMessages does. A new
+      // array re-renders every row on each 20 s poll and focus, and the
+      // list re-measures under the reader (the chat "twitch").
+      if (
+        next.length === prev.length &&
+        next.every((r, i) => r.id === prev[i].id && r.emoji === prev[i].emoji)
+      ) {
+        return prev;
+      }
       return next;
     });
   }, [groupId]);
@@ -217,15 +226,18 @@ export function useChatSync({
       }
     }
     setReads((prev) => {
-      const next = { ...prev };
+      // Copied only when a frontier moves, so an unchanged poll keeps the
+      // same reference (see syncReactions).
+      let next: Record<string, string> | null = null;
       for (const r of data as ChatRead[]) {
-        const cur = next[r.user_id];
+        const cur = (next ?? prev)[r.user_id];
         // Frontiers only move forward - a stale fetch must not rewind one.
         if (!cur || parseTs(r.last_read_at) > parseTs(cur)) {
+          next ??= { ...prev };
           next[r.user_id] = r.last_read_at;
         }
       }
-      return next;
+      return next ?? prev;
     });
   }, [groupId, userId]);
 
