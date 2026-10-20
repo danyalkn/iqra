@@ -24,7 +24,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.qadamtechnologies.iqra"
+      "package": "com.qadamtechnologies.iqra",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
