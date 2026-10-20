@@ -285,6 +285,8 @@ Decisions taken while building, refining the plan above:
    Policy URL (optional but cheap).
 5. **Android push**: Firebase project, `google-services.json`, FCM V1 key
    via `eas credentials` (needs the owner's Google login once).
+   Full plan, owner steps and the member's move off the PWA:
+   `docs/ANDROID.md` (2026-10-20).
 6. Later: **Unlisted App Store distribution** (no orange beta dot, no
    90-day expiry); App Privacy answers are in PHASE4.md ship step 6.
 7. Open product question: member 39587991 is on Juz 29 and may memorize
