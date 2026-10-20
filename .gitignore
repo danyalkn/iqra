@@ -49,3 +49,6 @@ example
 
 # Supabase CLI link state (per machine)
 supabase/.temp/
+
+# Firebase service account keys (secret, they live on EAS only)
+*firebase-adminsdk*.json
