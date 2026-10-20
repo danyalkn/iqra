@@ -12,7 +12,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AppState,
   Keyboard,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -50,6 +49,7 @@ import {
 import { useMembership } from "@/hooks/use-membership";
 import { useOutbox } from "@/hooks/use-outbox";
 import { useNow } from "@/hooks/use-now";
+import { useTabBarClearance } from "@/hooks/use-tab-bar-clearance";
 import { useTheme } from "@/hooks/use-theme";
 import {
   currentStreak,
@@ -143,25 +143,19 @@ function deviceTimeZone(): string {
  *  row's action buttons (Edit, Delete) to stay tappable. */
 const LIST_BOTTOM_CLEARANCE = 112;
 
-/** Space under the last row. On iOS the liquid-glass tab bar floats over the
- *  tab screen and nothing insets the scroll view for it, and insets.bottom
- *  there is the tab bar plus the home indicator (the tab screen has its own
- *  SafeAreaProvider; the FAB is positioned from the same value in
- *  fabBottomOffset), so it is added to the clearance that sits above the bar.
- *  On Android expo-router wraps the tab screen in a SafeAreaView whose bottom
- *  edge already ends above the bar, so adding it again would leave a blank
- *  band. */
-function listBottomClearance(insetBottom: number): number {
-  return Platform.OS === "ios" ? LIST_BOTTOM_CLEARANCE + insetBottom : LIST_BOTTOM_CLEARANCE;
+/** Space under the last row: LIST_BOTTOM_CLEARANCE above the tab bar. The
+ *  bar floats over the tab screen on both platforms (iOS: the system Liquid
+ *  Glass bar; Android: our glass bar) and nothing insets the scroll view for
+ *  it, so the bar clearance (useTabBarClearance) is added on top. */
+function listBottomClearance(barClearance: number): number {
+  return LIST_BOTTOM_CLEARANCE + barClearance;
 }
 
-/** Web: the FAB sits bottom-5 (20) from the page. On iOS the tab screen has
- *  its own SafeAreaProvider (expo-router NativeTabsView.ios), so
- *  insets.bottom there is the tab bar plus the home indicator and the FAB is
- *  absolutely positioned (no scroll-view inset helps it). On Android the
- *  SafeAreaView around the screen already ends above the tab bar. */
-function fabBottomOffset(insetBottom: number): number {
-  return Platform.OS === "ios" ? insetBottom + 20 : 20;
+/** Web: the FAB sits bottom-5 (20) from the page. Here it sits 20 above the
+ *  floating tab bar; it is absolutely positioned, so no scroll-view inset
+ *  helps it and it takes the bar clearance directly. */
+function fabBottomOffset(barClearance: number): number {
+  return barClearance + 20;
 }
 
 /** How long the LogSheet's Modal stays mounted while it slides out. */
@@ -209,6 +203,7 @@ function entriesWord(n: number): string {
 export default function TodayScreen() {
   const c = useTheme();
   const insets = useSafeAreaInsets();
+  const barClearance = useTabBarClearance();
   const { user, profile } = useSession();
   const { membership } = useMembership();
   const params = useLocalSearchParams<{ log?: string; r?: string; amount?: string }>();
@@ -895,7 +890,7 @@ export default function TodayScreen() {
           the pull-to-refresh spinner below the status bar. */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingBottom: listBottomClearance(insets.bottom) }}
+        contentContainerStyle={{ paddingBottom: listBottomClearance(barClearance) }}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           groupId ? (
@@ -1111,7 +1106,7 @@ export default function TodayScreen() {
         // Solid together with the body: a tap during the first fetch would
         // open a sheet without the hifz continuation (see pendingLog).
         disabled={!groupId || loadState === "loading"}
-        bottomOffset={fabBottomOffset(insets.bottom)}
+        bottomOffset={fabBottomOffset(barClearance)}
       />
 
       <LogSheet

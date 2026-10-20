@@ -4,7 +4,6 @@ import { Inbox, Users, WifiOff } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AppState,
-  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -22,6 +21,7 @@ import { Radius, Type } from "@/constants/theme";
 import { deleteEntry, markEntriesChanged } from "@/data/entryWrites";
 import { useMembership } from "@/hooks/use-membership";
 import { useNow } from "@/hooks/use-now";
+import { useTabBarClearance } from "@/hooks/use-tab-bar-clearance";
 import { useTheme } from "@/hooks/use-theme";
 import { getMyRecentNudges } from "@/lib/data";
 import { dayLabel, lastNDaysEndingOn, localDate } from "@/lib/dates";
@@ -31,19 +31,17 @@ import type { GroupMember, LogRow } from "@/lib/types";
 import { useSession } from "@/providers/SessionProvider";
 import { supabase } from "@/supabase/client";
 
-/** Web: pb-6 under the list. Fixed 40 here, plus the tab bar on iOS: see
+/** Web: pb-6 under the list. Fixed 40 here, plus the tab bar: see
  *  listBottomClearance and the insets note on the screen. */
 const LIST_BOTTOM_CLEARANCE = 40;
 
-/** Space under the last card. On iOS the liquid-glass tab bar floats over the
- *  tab screen and nothing insets the scroll view for it (the Phase 1 device
- *  check showed content under the bar), and insets.bottom there is the tab
- *  bar plus the home indicator (the tab screen has its own SafeAreaProvider),
- *  so it is added on top of the fixed gap. On Android expo-router wraps the
- *  tab screen in a SafeAreaView whose bottom edge already clears the bar, so
- *  adding it again would leave a blank band. */
-function listBottomClearance(insetBottom: number): number {
-  return Platform.OS === "ios" ? LIST_BOTTOM_CLEARANCE + insetBottom : LIST_BOTTOM_CLEARANCE;
+/** Space under the last card. The tab bar floats over the tab screen on both
+ *  platforms (iOS: the system Liquid Glass bar; Android: our glass bar) and
+ *  nothing insets the scroll view for it (the Phase 1 device check showed
+ *  content under the iOS bar), so the bar clearance (useTabBarClearance) is
+ *  added on top of the fixed gap. */
+function listBottomClearance(barClearance: number): number {
+  return LIST_BOTTOM_CLEARANCE + barClearance;
 }
 
 const REFRESH_ERROR = "Couldn’t refresh the feed. Pull down to try again.";
@@ -145,15 +143,16 @@ const byNewest = (a: LogRow, b: LogRow) =>
  *
  * Insets: the tab screen gets no automatic top inset on either platform (on
  * iOS 26 react-native-screens does not inset the scroll view for the status
- * bar and Dynamic Island, and Android native tabs apply only the bottom
- * inset), so the root View pads insets.top itself and the ScrollView sits
- * inside it. That keeps the pull-to-refresh spinner below the status bar,
- * which it would not be if the padding lived in the scroll content. The
- * bottom is listBottomClearance. Same shape as Today and Profile.
+ * bar and Dynamic Island, and the Android headless tabs apply none), so the
+ * root View pads insets.top itself and the ScrollView sits inside it. That
+ * keeps the pull-to-refresh spinner below the status bar, which it would
+ * not be if the padding lived in the scroll content. The bottom is
+ * listBottomClearance. Same shape as Today and Profile.
  */
 export default function FeedScreen() {
   const c = useTheme();
   const insets = useSafeAreaInsets();
+  const barClearance = useTabBarClearance();
   const { user, profile } = useSession();
   const { membership, refresh: refreshMembership } = useMembership();
 
@@ -500,7 +499,7 @@ export default function FeedScreen() {
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: listBottomClearance(insets.bottom) },
+          { paddingBottom: listBottomClearance(barClearance) },
         ]}
         refreshControl={
           groupId || membership === null ? (

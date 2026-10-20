@@ -4,7 +4,6 @@ import { LogOut, NotebookPen } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from "react";
 import {
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -25,6 +24,7 @@ import { Button, Card, SegmentedControl } from "@/components/ui";
 import { Type } from "@/constants/theme";
 import { syncOutbox } from "@/data/sync";
 import { withTimeout } from "@/data/timeout";
+import { useTabBarClearance } from "@/hooks/use-tab-bar-clearance";
 import { useTheme } from "@/hooks/use-theme";
 import { useSession } from "@/providers/SessionProvider";
 import { useThemeContext, type ThemePreference } from "@/providers/ThemeProvider";
@@ -68,16 +68,16 @@ function asSection(v: string | null): SettingsSection | null {
  * Insets: the tab screen gets no automatic top inset on either platform (on
  * iOS 26 react-native-screens does not inset the scroll view for the status
  * bar and Dynamic Island), so the root View pads insets.top itself and the
- * ScrollView sits inside it. At the bottom the iOS liquid-glass tab bar floats
- * over the screen with nothing insetting the scroll view for it, so
- * insets.bottom (tab bar plus home indicator) is added to the fixed 40. On
- * Android native tabs wrap the screen in a SafeAreaView whose bottom edge
- * already clears the tab bar and navigation bar, so the bottom stays a
- * fixed 40 there (same reasoning as Today and Feed).
+ * ScrollView sits inside it. At the bottom the tab bar floats over the
+ * screen on both platforms (iOS: the system Liquid Glass bar; Android: our
+ * glass bar) with nothing insetting the scroll view for it, so the bar
+ * clearance (useTabBarClearance) is added to the fixed 40 (same reasoning
+ * as Today and Feed).
  */
 export default function ProfileScreen() {
   const c = useTheme();
   const insets = useSafeAreaInsets();
+  const barClearance = useTabBarClearance();
   const { user, signOut } = useSession();
   const { preference, setPreference } = useThemeContext();
   const [signingOut, setSigningOut] = useState(false);
@@ -168,9 +168,7 @@ export default function ProfileScreen() {
         ref={scrollRef}
         style={styles.scroll}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{
-          paddingBottom: Platform.OS === "ios" ? 40 + insets.bottom : 40,
-        }}
+        contentContainerStyle={{ paddingBottom: 40 + barClearance }}
       >
         <View style={styles.header}>
           <Text style={[Type.display, { color: c.foreground }]}>Profile</Text>

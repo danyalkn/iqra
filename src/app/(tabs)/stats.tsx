@@ -19,7 +19,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import {
   AppState,
-  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -50,6 +49,7 @@ import { Button, SegmentedControl, type Segment } from "@/components/ui";
 import { Radius, Type } from "@/constants/theme";
 import { useMembership } from "@/hooks/use-membership";
 import { useNow } from "@/hooks/use-now";
+import { useTabBarClearance } from "@/hooks/use-tab-bar-clearance";
 import { useTheme } from "@/hooks/use-theme";
 import { getGroupPagesAllTime, getMyEntriesAllTime } from "@/lib/data";
 import {
@@ -217,6 +217,7 @@ const RECAP_SCROLL_MARGIN = 16;
 export default function StatsScreen() {
   const c = useTheme();
   const insets = useSafeAreaInsets();
+  const barClearance = useTabBarClearance();
   const { user, profile } = useSession();
   const { membership, refresh: refreshMembership } = useMembership();
   const params = useLocalSearchParams<{ section?: string }>();
@@ -825,13 +826,13 @@ export default function StatsScreen() {
   // screen gets none, which left the header under the clock and the last
   // row under the tab bar. So insets are off (contentInsetAdjustmentBehavior
   // "never") and the container pads them itself, as Today's root View does.
-  // Top: the status bar / Dynamic Island on both platforms. Bottom: on iOS
-  // the screen runs under the floating tab bar, so the home-indicator inset
-  // is added to the 40 of air; Android's tab bar sits below the screen
-  // (its SafeAreaView already clears it), so 40 alone.
+  // Top: the status bar / Dynamic Island on both platforms. Bottom: the
+  // screen runs under the floating tab bar on both platforms (iOS: the
+  // system Liquid Glass bar; Android: our glass bar), so the bar clearance
+  // (useTabBarClearance) is added to the 40 of air.
   const insetPad = {
     paddingTop: insets.top,
-    paddingBottom: 40 + (Platform.OS === "ios" ? insets.bottom : 0),
+    paddingBottom: 40 + barClearance,
   };
 
   if (membership === null) {

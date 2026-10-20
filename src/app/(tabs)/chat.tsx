@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   AppState,
   Keyboard,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -30,6 +29,7 @@ import { Placeholder } from "@/components/Placeholder";
 import { Button } from "@/components/ui";
 import { Radius, Type } from "@/constants/theme";
 import { useMembership } from "@/hooks/use-membership";
+import { useTabBarClearance } from "@/hooks/use-tab-bar-clearance";
 import { useTheme } from "@/hooks/use-theme";
 import type { ChatRead, GroupMember, Membership, Message, Reaction } from "@/lib/types";
 import { useSession } from "@/providers/SessionProvider";
@@ -43,9 +43,6 @@ type LoadState = "loading" | "ready" | "failed";
  *  already keeps the web's py-2.5 (10) under the field on top of
  *  `bottomPadding`, and that is the gap the web had above the keyboard. */
 const KEYBOARD_GAP = 0;
-/** Under the field row on Android, where the opaque tab bar already ends
- *  the screen (expo-router wraps it in a bottom SafeAreaView). */
-const ANDROID_BOTTOM_PADDING = 8;
 
 const SEND_ERROR = "Couldn’t send that message. Check your connection and try again.";
 const STALE_ERROR = "Can’t reach the chat right now. Retrying…";
@@ -420,7 +417,7 @@ function ChatRoom({
   initialReads,
 }: RoomIdentity & { initialMembers: GroupMember[]; initialReads: ChatRead[] }) {
   const c = useTheme();
-  const insets = useSafeAreaInsets();
+  const barClearance = useTabBarClearance();
   const [members, setMembers] = useState<GroupMember[]>(initialMembers);
   const { messages, setMessages, reactions, setReactions, reads, loadState, stale, retry } =
     useChatSync({ groupId, userId, initialReads });
@@ -742,15 +739,17 @@ function ChatRoom({
     [reactors, messageMap, toggleReaction, closeReactors],
   );
 
-  // The screen sits under the translucent iOS tab bar, so the composer
-  // carries the tab bar + home indicator while the keyboard is closed. The
-  // keyboard-controller KeyboardAvoidingView pads by
+  // The screen runs under the floating tab bar on both platforms (iOS: the
+  // system Liquid Glass bar; Android: our glass bar), so the composer
+  // carries the bar clearance (useTabBarClearance) while the keyboard is
+  // closed. The keyboard-controller KeyboardAvoidingView pads by
   // (keyboard height + keyboardVerticalOffset), same sign as RN's; a
-  // negative offset of (inset - gap) makes that padding plus the composer's
-  // own inset end KEYBOARD_GAP above the keyboard. Android's tab bar is
-  // opaque and expo-router's SafeAreaView already ends the screen above it.
-  const bottomPadding = Platform.OS === "ios" ? insets.bottom : ANDROID_BOTTOM_PADDING;
-  const keyboardVerticalOffset = Platform.OS === "ios" ? KEYBOARD_GAP - insets.bottom : 0;
+  // negative offset of (clearance - gap) makes that padding plus the
+  // composer's own clearance end KEYBOARD_GAP above the keyboard. On
+  // Android the bar slides off screen while the keyboard is open, so the
+  // field sits on the keyboard there too.
+  const bottomPadding = barClearance;
+  const keyboardVerticalOffset = KEYBOARD_GAP - barClearance;
 
   const banner = sendError ?? (loadState === "ready" && stale ? STALE_ERROR : null);
 
