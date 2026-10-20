@@ -171,11 +171,24 @@ exists but stays unscheduled (superseded by the lapse nudge).
   manual theme toggle in Settings in addition to system.
 - Celebration (confetti + encouragement card) on logging, with a toggle to
   turn it off in Settings.
-- iOS-feel everywhere: native tab bar, sheets that swipe down to dismiss,
-  wheel pickers for amounts, haptics on log.
+- iOS-feel everywhere: the system tab bar on iOS (Android: the glass bar
+  below), sheets that swipe down to dismiss, wheel pickers for amounts,
+  haptics on log.
 - The tab bar never minimizes on scroll (2026-10-18). iOS 26 can shrink it
   to a single icon while scrolling down; the owner found that read as the
   bar disappearing, so it stays full size on every screen.
+- **Android gets its own glass tab bar (owner decision 2026-10-20).** iOS
+  keeps the system NativeTabs bar untouched: not restyled, never
+  minimised. Material 3 has no glass material, so Android gets a custom
+  floating, frosted, Paper & Pine tinted bar that imitates the iOS 26 bar
+  (`src/app/(tabs)/_layout.android.tsx`, `src/components/tabBar/`:
+  headless `expo-router/ui` tabs with `expo-blur`). Same five tabs, order
+  and labels; selected tab in the accent with a tinted capsule and a faint
+  fill in the glyph (Lucide has no filled variants); hidden while the
+  keyboard is open; never minimised; re-tap scrolls to the top, as before.
+  Live blur only on Android 12 and later, older phones get the same bar
+  solid. This is the one exception to "do not restyle the tab bar"; the
+  iOS rule stands.
 - No em dashes in any copy.
 
 ## Operations
