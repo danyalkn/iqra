@@ -7,11 +7,16 @@ import { useTheme } from "@/hooks/use-theme";
  * bar was Today, Feed, Stats, Chat with Journal reached from Today; native
  * keeps Journal as a stack screen off Today, labels Stats "Insights" like
  * its page title, and adds Profile as the fifth tab (owner decision
- * 2026-10-16). SF Symbols on iOS, Material Symbols on Android (Lucide
- * stays for in-screen icons). The bar itself is the system one; do not
- * restyle it, and keep it fully visible while scrolling (owner decision
- * 2026-10-18: the iOS 26 shrink-to-one-icon behaviour read as the bar
- * disappearing).
+ * 2026-10-16). SF Symbols on iOS (Lucide stays for in-screen icons).
+ *
+ * On iOS the bar is the system one: it is not restyled and it never
+ * minimises while scrolling (owner decision 2026-10-18: the iOS 26
+ * shrink-to-one-icon behaviour read as the bar disappearing). Android has
+ * its own floating glass bar in _layout.android.tsx (owner decision
+ * 2026-10-20), which Expo Router picks there instead of this file, so the
+ * Android props here (the `md=` Material Symbols names, `indicatorColor`,
+ * `rippleColor`) are no longer reached on a device. They stay because this
+ * is still the base route file and must remain valid on every platform.
  */
 export default function TabsLayout() {
   const c = useTheme();
