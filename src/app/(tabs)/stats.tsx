@@ -49,6 +49,7 @@ import { Button, SegmentedControl, type Segment } from "@/components/ui";
 import { Radius, Type } from "@/constants/theme";
 import { useMembership } from "@/hooks/use-membership";
 import { useNow } from "@/hooks/use-now";
+import { useReselectScrollToTop } from "@/hooks/use-reselect-scroll-to-top";
 import { useTabBarClearance } from "@/hooks/use-tab-bar-clearance";
 import { useTheme } from "@/hooks/use-theme";
 import { getGroupPagesAllTime, getMyEntriesAllTime } from "@/lib/data";
@@ -647,6 +648,7 @@ export default function StatsScreen() {
     setRecapY(e.nativeEvent.layout.y);
   }, []);
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  useReselectScrollToTop(scrollRef);
   const recapReady = wantRecap && loadState === "ready" && scope === "mine" && recapY != null;
   const insetTop = insets.top;
   useEffect(() => {

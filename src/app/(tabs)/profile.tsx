@@ -24,6 +24,7 @@ import { Button, Card, SegmentedControl } from "@/components/ui";
 import { Type } from "@/constants/theme";
 import { syncOutbox } from "@/data/sync";
 import { withTimeout } from "@/data/timeout";
+import { useReselectScrollToTop } from "@/hooks/use-reselect-scroll-to-top";
 import { useTabBarClearance } from "@/hooks/use-tab-bar-clearance";
 import { useTheme } from "@/hooks/use-theme";
 import { useSession } from "@/providers/SessionProvider";
@@ -129,6 +130,7 @@ export default function ProfileScreen() {
   const [blockY, setBlockY] = useState<number | null>(null);
   const [sectionY, setSectionY] = useState<{ notifications?: number; reminders?: number }>({});
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  useReselectScrollToTop(scrollRef);
   const onBlockLayout = useCallback((e: LayoutChangeEvent) => {
     setBlockY(e.nativeEvent.layout.y);
   }, []);

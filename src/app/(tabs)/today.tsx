@@ -8,7 +8,7 @@ import {
   UserPlus,
   WifiOff,
 } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import {
   AppState,
   Keyboard,
@@ -49,6 +49,7 @@ import {
 import { useMembership } from "@/hooks/use-membership";
 import { useOutbox } from "@/hooks/use-outbox";
 import { useNow } from "@/hooks/use-now";
+import { useReselectScrollToTop } from "@/hooks/use-reselect-scroll-to-top";
 import { useTabBarClearance } from "@/hooks/use-tab-bar-clearance";
 import { useTheme } from "@/hooks/use-theme";
 import {
@@ -204,6 +205,8 @@ export default function TodayScreen() {
   const c = useTheme();
   const insets = useSafeAreaInsets();
   const barClearance = useTabBarClearance();
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  useReselectScrollToTop(scrollRef);
   const { user, profile } = useSession();
   const { membership } = useMembership();
   const params = useLocalSearchParams<{ log?: string; r?: string; amount?: string }>();
@@ -889,6 +892,7 @@ export default function TodayScreen() {
           itself (no automatic top inset on the tab screen), which also keeps
           the pull-to-refresh spinner below the status bar. */}
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={{ paddingBottom: listBottomClearance(barClearance) }}
         keyboardShouldPersistTaps="handled"

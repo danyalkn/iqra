@@ -1,7 +1,7 @@
 import * as Haptics from "expo-haptics";
 import { useFocusEffect } from "expo-router";
 import { Inbox, Users, WifiOff } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import {
   AppState,
   RefreshControl,
@@ -21,6 +21,7 @@ import { Radius, Type } from "@/constants/theme";
 import { deleteEntry, markEntriesChanged } from "@/data/entryWrites";
 import { useMembership } from "@/hooks/use-membership";
 import { useNow } from "@/hooks/use-now";
+import { useReselectScrollToTop } from "@/hooks/use-reselect-scroll-to-top";
 import { useTabBarClearance } from "@/hooks/use-tab-bar-clearance";
 import { useTheme } from "@/hooks/use-theme";
 import { getMyRecentNudges } from "@/lib/data";
@@ -153,6 +154,8 @@ export default function FeedScreen() {
   const c = useTheme();
   const insets = useSafeAreaInsets();
   const barClearance = useTabBarClearance();
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  useReselectScrollToTop(scrollRef);
   const { user, profile } = useSession();
   const { membership, refresh: refreshMembership } = useMembership();
 
@@ -496,6 +499,7 @@ export default function FeedScreen() {
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: c.canvas }]}>
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
