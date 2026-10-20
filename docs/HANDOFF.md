@@ -136,20 +136,24 @@ update to the Status section at the bottom of this file.
   src/app/_layout.tsx          providers, auth gate (redirect to login / onboarding)
   src/app/(auth)/login.tsx
   src/app/onboarding.tsx
-  src/app/(tabs)/_layout.tsx   NativeTabs: Today, Feed, Chat, Insights, Profile
+  src/app/(tabs)/_layout.tsx   NativeTabs (iOS): Today, Feed, Chat, Insights, Profile
+  src/app/(tabs)/_layout.android.tsx  Android: headless tabs + the glass bar
+                               (src/components/tabBar/, DECISIONS 2026-10-20)
   src/app/(tabs)/today.tsx | feed.tsx | chat.tsx | stats.tsx | profile.tsx
   src/app/settings.tsx         stack screen over tabs
   src/app/journal.tsx          stack screen over tabs, opened from Today
   (Owner decision 2026-10-16: Profile replaced Journal as the fifth tab;
-  the system tab bar is not to be restyled.)
+  the iOS system tab bar is not to be restyled. Owner decision 2026-10-20:
+  Android has its own glass bar, see DECISIONS "Design".)
   ```
 - [x] UI kit in `src/components/ui/` (barrel `index.ts`): Button, Card,
       Field (FieldLabel, Input, Textarea, TimeInput via
       `@react-native-community/datetimepicker`), Badge, Avatar (expo-image),
       SegmentedControl, Sheet (Modal + Reanimated + gesture-handler v3 hook
       API; `dragAnywhere={false}` when the content is a ScrollView). Tab bar
-      is NativeTabs. Lucide via `lucide-react-native` for in-screen icons;
-      tab icons are SF Symbols / Material Symbols.
+      is NativeTabs on iOS and the glass bar (`src/components/tabBar/`) on
+      Android. Lucide via `lucide-react-native` for in-screen icons and the
+      Android tab icons; iOS tab icons are SF Symbols.
 - [x] `src/lib/data.ts`: every query ported; each takes `supabase` as its
       first argument so the file stays RN-free. `fetchAll` and the
       newest-first comments kept verbatim.

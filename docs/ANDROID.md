@@ -209,15 +209,28 @@ bar because Material has no glass. Also fix the header comment in
   known issues and performance notes.
 - **Keep `expo-blur` out of the iOS bundle.** The TestFlight 1.0.0
   binary has no ExpoBlur native module. If iOS JS imports `expo-blur`,
-  the next iOS EAS update crashes on launch. Import it only from
-  `.android.tsx` files. Verify with
-  `npx expo export --platform ios --output-dir <scratch>` and grep the
-  bundle for `ExpoBlur` (must be absent).
+  the next iOS EAS update crashes on launch. Corrected 2026-10-20 after
+  checking the export source map: route `.android.tsx` files ARE bundled
+  on iOS (expo-router's route context takes every platform file and only
+  ignores the route there), so "import it only from `.android.tsx`
+  files" is not enough. What keeps it out: `_layout.android.tsx` imports
+  the bar by the bare specifier `@/components/tabBar/AndroidTabs`, which
+  Metro resolves to the blur-free `AndroidTabs.tsx` fallback on iOS and
+  to `AndroidTabs.android.tsx` on Android. Rule: import `expo-blur` only
+  from a non-route `.android.tsx` component reached through a bare
+  specifier with a blur-free sibling; never from a route file and never
+  by the explicit `.android` path. Proof stays
+  `npx expo export --platform ios --output-dir <scratch>` and
+  `grep -c -a ExpoBlur` on the `.hbc` (must print 0; `NativeTabs` prints
+  3 there, which shows the grep sees strings).
 - **Icons.** NativeTabs takes Material Symbols names (`md=`). A custom bar
-  draws its own icons. Check whether `expo-symbols` renders Material
-  Symbols on Android in SDK 58. If not, use Lucide (`lucide-react-native`,
-  already the in-screen icon set) with matching shapes. No new icon font
-  without asking. Filled versus outline for selected, as on iOS.
+  draws its own icons. Decided 2026-10-20: Lucide (`lucide-react-native`,
+  already the in-screen icon set). `expo-symbols` does render Material
+  Symbols on Android in SDK 58, but it loads a multi-megabyte font with
+  `expo-font` after mount, so the bar would render blank on every cold
+  start and every Android update would carry the font. Lucide has no
+  filled variants: the selected glyph gets a faint accent fill inside its
+  outline plus a heavier stroke.
 - **Look.** Tokens from `src/constants/theme.ts` only. Bar about 64 tall,
   16 side margin, `insets.bottom + 8` from the bottom (the gesture bar),
   radius full. Tint: `c.surface` at roughly 70 percent opacity over the
