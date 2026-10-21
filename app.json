@@ -71,7 +71,8 @@
         }
       ],
       "expo-image",
-      "expo-status-bar"
+      "expo-status-bar",
+      "./plugins/withGradleMemory.js"
     ],
     "experiments": {
       "typedRoutes": true,
