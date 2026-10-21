@@ -2,7 +2,7 @@
   "expo": {
     "name": "Iqra",
     "slug": "iqra",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/brand/icon-1024.png",
     "scheme": ["iqra", "device-activity"],
@@ -17,7 +17,6 @@
       }
     },
     "android": {
-      "version": "1.1.0",
       "adaptiveIcon": {
         "backgroundColor": "#157f43",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
