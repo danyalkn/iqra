@@ -61,7 +61,9 @@
           "appleTeamId": "69BV989JDV",
           "appGroup": "group.com.qadamtechnologies.iqra"
         }
-      ]
+      ],
+      "expo-image",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true,
