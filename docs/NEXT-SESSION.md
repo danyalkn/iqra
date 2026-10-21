@@ -278,9 +278,9 @@ Decisions taken while building, refining the plan above:
    screen; option B remains the fix if the phone ever shows a lost tap.
 2. **Revision nudge**: confirm the 8 PM "Revision suggestion" fires only
    when something due is still unrevised, and not after logging it.
-3. **Family Controls (Distribution) requests**: four, filed by the Account
-   Holder, exact ids and text in `docs/SCREEN-TIME.md` (the monitor
-   extension is `.ActivityMonitorExtension`). Not confirmed filed.
+3. ~~Family Controls (Distribution) requests~~ Filed and approved
+   2026-10-21 (one account-wide request, not four). The build session
+   starts from `docs/FOCUS.md`.
 4. **TestFlight public link** for the circle; Test Information > Privacy
    Policy URL (optional but cheap).
 5. **Android 1.1.0**: done 2026-10-20 (Firebase, FCM V1 key on EAS, the
