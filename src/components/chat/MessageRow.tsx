@@ -1,6 +1,7 @@
 import * as Clipboard from "expo-clipboard";
+import { Image } from "expo-image";
 import { Reply } from "lucide-react-native";
-import { useEffect, useRef, type ComponentRef } from "react";
+import { useEffect, useRef, useState, type ComponentRef } from "react";
 import {
   Keyboard,
   Pressable,
@@ -21,19 +22,29 @@ import { scheduleOnRN } from "react-native-worklets";
 
 import { Avatar } from "@/components/ui";
 import { Radius, Type } from "@/constants/theme";
+import { chatImageSource } from "@/data/chatImages";
 import { useTheme } from "@/hooks/use-theme";
 import type { GroupMember, Message, Reaction } from "@/lib/types";
+import { useSession } from "@/providers/SessionProvider";
 
 import type { Anchor } from "./ActionOverlay";
+import { ImageViewer } from "./ImageViewer";
 import { MessageBody } from "./MessageBody";
 import { ReactionChips } from "./ReactionChips";
 import {
   LIST_PAD_RIGHT,
   LONG_PRESS_MS,
+  messagePreview,
   REVEAL_MAX,
   SWIPE_REPLY_MAX,
   SWIPE_REPLY_TRIGGER,
 } from "./shared";
+
+/** A picture in a bubble: this wide, as tall as its shape says up to a cap
+ *  (a tall portrait is cropped to the cap rather than filling the screen).
+ *  Fits inside the bubble's 76% at every iPhone width. */
+const PHOTO_WIDTH = 230;
+const PHOTO_MAX_HEIGHT = 300;
 
 /** Everything the list derives for one message (the per-row locals of the
  *  web's messages.map), computed once in MessageList so a recycled row only
@@ -153,6 +164,18 @@ export function MessageRow({
   } = meta;
   const mid = msg.id;
   const bubbleRef = useRef<ComponentRef<typeof View>>(null);
+
+  // The picture, when there is one: the sender's own copy while it is on
+  // this phone, else the stored object (downloaded once, then from disk).
+  const { session } = useSession();
+  const photo = msg.local_image
+    ? { uri: msg.local_image }
+    : msg.image_path
+      ? chatImageSource(msg.image_path, session?.access_token ?? null)
+      : null;
+  const ratio = msg.image_w && msg.image_h ? msg.image_h / msg.image_w : 3 / 4;
+  const photoHeight = Math.min(PHOTO_MAX_HEIGHT, Math.round(PHOTO_WIDTH * ratio));
+  const [viewing, setViewing] = useState(false);
 
   // Swipe-right-to-reply offset for this row only (the web's swipeReply.x).
   const dragX = useSharedValue(0);
@@ -284,7 +307,7 @@ export function MessageRow({
               ]}
             >
               <Text numberOfLines={2} style={[Type.footnote, { color: c.muted }]}>
-                {original ? original.body : "Original message unavailable"}
+                {original ? messagePreview(original) : "Original message unavailable"}
               </Text>
             </Pressable>
           </View>
@@ -331,14 +354,38 @@ export function MessageRow({
                   {sender?.display_name ?? "Member"}
                 </Text>
               )}
-              <MessageBody
-                body={msg.body}
-                names={memberNames}
-                mine={mine}
-                style={[styles.body, { color: bodyColor }]}
-              />
+              {photo && (
+                // Its own Pressable: a tap opens the viewer, the long press
+                // still reaches the overlay (a nested Pressable keeps the
+                // touch, so the outer one would never see it).
+                <Pressable
+                  accessibilityRole="imagebutton"
+                  accessibilityLabel="Photo"
+                  onPress={() => setViewing(true)}
+                  onLongPress={pending ? undefined : handleLongPress}
+                  delayLongPress={LONG_PRESS_MS}
+                  style={[styles.photoWrap, msg.body ? styles.photoAboveCaption : null]}
+                >
+                  <Image
+                    source={photo}
+                    style={[styles.photo, { height: photoHeight, backgroundColor: c.border }]}
+                    contentFit="cover"
+                    transition={150}
+                    recyclingKey={mid}
+                  />
+                </Pressable>
+              )}
+              {msg.body ? (
+                <MessageBody
+                  body={msg.body}
+                  names={memberNames}
+                  mine={mine}
+                  style={[styles.body, { color: bodyColor }]}
+                />
+              ) : null}
               <ReactionChips reactions={reactions} mine={mine} onOpen={handleChips} />
             </Pressable>
+            <ImageViewer source={viewing ? photo : null} onClose={() => setViewing(false)} />
 
             {/* Time revealed by swiping the conversation left. */}
             <View pointerEvents="none" style={styles.timeWrap}>
@@ -438,6 +485,11 @@ const styles = StyleSheet.create({
   spineBottomLeft: { borderBottomLeftRadius: 7 },
   pending: { opacity: 0.7 },
   sender: { fontWeight: "600", marginBottom: 2 },
+  // Inside the bubble's padding, with its own rounding; the bubble's 20pt
+  // corners sit 14pt and 8pt away, so the picture's cannot clash with them.
+  photoWrap: { marginHorizontal: -6, marginVertical: -2 },
+  photoAboveCaption: { marginBottom: 6 },
+  photo: { width: PHOTO_WIDTH, borderRadius: 14 },
   // Web: text-[15px] leading-snug.
   body: { fontSize: 15, lineHeight: 20 },
   // Web: absolute left-[calc(100%+1rem)] w-16 pr-3 text-right, centered on
