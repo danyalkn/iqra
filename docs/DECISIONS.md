@@ -171,10 +171,14 @@ in `docs/SCREEN-TIME.md`, build notes in `docs/FOCUS.md` and SCREEN-TIME's
   applied it; on earlier iOS it is "Remind me" and posts a local
   notification with the member's log buttons, since no shield button could
   open an app before 26.5. Paper & Pine accent, no em dashes.
-- **Another account signing in on the phone turns Focus off** (shield and
-  all); signing out leaves it as it is for the member who comes back.
-  Revoking Screen Time access in iOS Settings lifts the block by itself;
-  the card shows the access note after Iqra is reopened.
+- **Signing out, deleting the account or another account signing in turns
+  Focus off** (shield and schedule included): a block only logging can
+  lift must not outlive the ability to log. The member picks their apps
+  again after signing in. Revoking Screen Time access in iOS Settings
+  lifts the block by itself; the card shows the access note after Iqra is
+  reopened.
+- **iOS 18 or later.** The extensions are built for iOS 18; older phones
+  see no Focus card.
 
 ## Chat
 

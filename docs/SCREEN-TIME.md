@@ -196,16 +196,32 @@ bodies):
 - **Today's loaded entries count too** (an entry dated today from the web
   or another phone unlocks once Today sees it), not only enqueues.
 - **Changing apps clears the block list first**: blocking only ever adds.
-- **Another account signing in turns Focus off**; sign-out leaves it.
+- **Sign-out, account deletion or another account signing in turns Focus
+  off** (review finding: a block only logging can lift must not outlive
+  the ability to log).
 - **Access revoked while on**: iOS lifts the block itself; the card shows
   the access note with "Allow access" after a restart.
+- **Focus needs iOS 18**: the extensions are built for 18.0 and without
+  them there is no shield look, buttons or midnight re-block.
 - `ios.appleTeamId` is set (expo-apple-targets reads it; the plugin's own
-  prop is not forwarded). The `device-activity` scheme stays registered
-  (harmless; it is what the library's `openApp` would open).
-- The extension targets default to iOS 18.0 (expo-apple-targets); fine
-  for this circle, note it if a member is on iOS 17.
+  prop is not forwarded). The `device-activity` scheme from the first
+  commit was dropped again with `openApp`.
 - At 00:00 iOS runs the monitor only once the phone is in use (Apple
-  docs), so an idle phone is re-blocked when next picked up.
+  docs), so an idle phone is re-blocked when next picked up. A log made
+  before that first use (a lock-screen button at 06:55) can be followed
+  by the re-block; the next log or foreground opens the apps again.
+- **Review (Opus, before the device checklist)**: nine confirmed findings,
+  all fixed in the three commits after dff5882: sign-out left the block
+  running; the picker anchor was unmounted before its debounced final
+  selection arrived (every Done could read as Cancel); noteLogged skipped
+  the native call when the day was already known; the shield look was
+  never refreshed and the midnight action's per-selection keys shadowed
+  it; iOS 16.4 to 17 was offered without working extensions; a failed
+  pref write could leave a schedule armed while off; a westward zone
+  change could block a logged day; the request resolving now counts as
+  approved. Accepted: enabling Focus between 23:58 and 00:00 after
+  logging blocks until midnight (the mid-day guard's two-minute margin);
+  before iOS 26.5 "Remind me" is silent when notifications are off.
 
 Next, in order (FOCUS.md § 6 is the detail):
 
