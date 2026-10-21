@@ -50,7 +50,8 @@ export function ActionOverlay({
   myEmoji: string | null;
   onReact: (emoji: string) => void;
   onReply: () => void;
-  onCopy: () => void;
+  /** Null for a picture without a caption: nothing to copy, no Copy row. */
+  onCopy: (() => void) | null;
   onClose: () => void;
 }) {
   const c = useTheme();
@@ -149,15 +150,19 @@ export function ActionOverlay({
             <Text style={[Type.callout, styles.menuLabel, { color: c.foreground }]}>Reply</Text>
             <Reply size={18} color={c.muted} />
           </Pressable>
-          <View style={[styles.hairline, { backgroundColor: c.border }]} />
-          <Pressable
-            accessibilityRole="button"
-            onPress={onCopy}
-            style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: c.surface2 }]}
-          >
-            <Text style={[Type.callout, styles.menuLabel, { color: c.foreground }]}>Copy</Text>
-            <Copy size={18} color={c.muted} />
-          </Pressable>
+          {onCopy && (
+            <>
+              <View style={[styles.hairline, { backgroundColor: c.border }]} />
+              <Pressable
+                accessibilityRole="button"
+                onPress={onCopy}
+                style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: c.surface2 }]}
+              >
+                <Text style={[Type.callout, styles.menuLabel, { color: c.foreground }]}>Copy</Text>
+                <Copy size={18} color={c.muted} />
+              </Pressable>
+            </>
+          )}
         </View>
       </Animated.View>
     </Modal>

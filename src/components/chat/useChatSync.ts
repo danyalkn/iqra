@@ -2,10 +2,11 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
-import type { ChatRead, Message, Reaction } from "@/lib/types";
+import type { ChatRead, Reaction } from "@/lib/types";
 import { setChatVisible } from "@/push/chatVisibility";
 import { supabase } from "@/supabase/client";
 
+import type { ChatMessage } from "./contracts";
 import { isTemp, parseTs } from "./shared";
 
 /** First load of the chat: not landed, landed, or failed before ever
@@ -51,7 +52,7 @@ export function useChatSync({
   /** Every member's frontier at open (seeds `reads` and our own latch). */
   initialReads: ChatRead[];
 }) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [reactions, setReactions] = useState<Reaction[]>([]);
   // Read frontiers: user_id → newest message time they have seen (IG model).
   const [reads, setReads] = useState<Record<string, string>>(() =>
@@ -110,10 +111,10 @@ export function useChatSync({
     }
     setStale(false);
     setLoadState("ready");
-    const server = ((data as Message[] | null) ?? []).reverse();
+    const server = ((data as ChatMessage[] | null) ?? []).reverse();
     if (server.length === 0) return true;
     setMessages((prev) => {
-      const byId = new Map<string, Message>();
+      const byId = new Map<string, ChatMessage>();
       for (const m of server) byId.set(m.id, m);
       // keep still-pending optimistic sends not yet on the server
       for (const m of prev) {
@@ -182,7 +183,7 @@ export function useChatSync({
   );
   const markRead = useCallback(async () => {
     if (!isVisible()) return;
-    let newest: Message | null = null;
+    let newest: ChatMessage | null = null;
     for (let i = messages.length - 1; i >= 0; i--) {
       if (!isTemp(messages[i].id)) {
         newest = messages[i];
@@ -329,7 +330,7 @@ export function useChatSync({
             filter: `group_id=eq.${groupId}`,
           },
           (payload) => {
-            const row = payload.new as Message;
+            const row = payload.new as ChatMessage;
             if (row.user_id === userId) return;
             setMessages((prev) => (prev.some((x) => x.id === row.id) ? prev : [...prev, row]));
           },

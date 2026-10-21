@@ -24,6 +24,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 
 import { ActionOverlay, type Anchor } from "@/components/chat/ActionOverlay";
+import type { ChatMessage } from "@/components/chat/contracts";
+import { ImageViewer } from "@/components/chat/ImageViewer";
 import { Composer } from "@/components/chat/Composer";
 import { MembersSheet } from "@/components/chat/MembersSheet";
 import { MessageList } from "@/components/chat/MessageList";
@@ -34,7 +36,12 @@ import { EmptyState } from "@/components/EmptyState";
 import { Placeholder } from "@/components/Placeholder";
 import { Button } from "@/components/ui";
 import { Radius, Type } from "@/constants/theme";
-import { deleteChatImage, uploadChatImage, type PickedImage } from "@/data/chatImages";
+import {
+  chatImageSource,
+  deleteChatImage,
+  uploadChatImage,
+  type PickedImage,
+} from "@/data/chatImages";
 import { useMembership } from "@/hooks/use-membership";
 import { useTabBarClearance } from "@/hooks/use-tab-bar-clearance";
 import { useTheme } from "@/hooks/use-theme";
@@ -473,11 +480,15 @@ function ChatRoom({
   const { messages, setMessages, reactions, setReactions, reads, loadState, stale, retry } =
     useChatSync({ groupId, userId, initialReads });
 
-  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   // Bumped to focus the composer after a swipe or a long-press Reply.
   const [focusRequest, setFocusRequest] = useState(0);
   // Long-press action overlay.
-  const [action, setAction] = useState<{ msg: Message; anchor: Anchor } | null>(null);
+  const [action, setAction] = useState<{ msg: ChatMessage; anchor: Anchor } | null>(null);
+  // The picture open full screen, by message id (one viewer for the screen),
+  // and the token stored pictures are fetched with.
+  const [photoOf, setPhotoOf] = useState<string | null>(null);
+  const { session } = useSession();
   // "Who reacted" sheet. `frozen` is the list shown while the sheet slides
   // out (CLOSE_MS), so the rows do not vanish before the panel does.
   const [reactors, setReactors] = useState<{
@@ -492,7 +503,7 @@ function ChatRoom({
   // already gone, as it was on the web).
   const [sendError, setSendError] = useState<string | null>(null);
 
-  const listRef = useRef<FlashListRef<Message>>(null);
+  const listRef = useRef<FlashListRef<ChatMessage>>(null);
   const atBottomRef = useRef(true);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -693,7 +704,7 @@ function ChatRoom({
     [messages],
   );
 
-  const startReply = useCallback((msg: Message) => {
+  const startReply = useCallback((msg: ChatMessage) => {
     if (isTemp(msg.id)) return;
     setReplyTo(msg);
     setAction(null);
@@ -729,7 +740,7 @@ function ChatRoom({
   const send = useCallback(
     async (body: string, mentions: string[], replyId: string | null, image: PickedImage | null) => {
       const id = tempId();
-      const optimistic: Message = {
+      const optimistic: ChatMessage = {
         id,
         group_id: groupId,
         user_id: userId,
@@ -781,14 +792,17 @@ function ChatRoom({
         .single();
 
       if (error || !data) {
-        if (imagePath) void deleteChatImage(imagePath);
+        // Only a refusal from the server leaves a sure orphan; a reply lost
+        // on the way (no code) may well have a row behind it, and deleting
+        // the object would leave everyone a grey box under a "Photo" push.
+        if (imagePath && error?.code) void deleteChatImage(imagePath);
         fail();
         return;
       }
       // Keep showing the copy on this phone: the row is identical to the one
       // in the bucket, so no download for the sender. The next sync replaces
       // the row with the server's and the cached copy takes over from there.
-      const saved: Message = { ...(data as Message), local_image: image?.uri };
+      const saved: ChatMessage = { ...(data as ChatMessage), local_image: image?.uri };
       // A sync that landed between the commit and this response already
       // merged the server row next to the temp; then just drop the temp, so
       // no id appears twice (FlashList keys and the row maps assume unique).
@@ -870,6 +884,8 @@ function ChatRoom({
               onSwipeReply={onSwipeReply}
               onOpenReactors={openReactors}
               onQuotePress={scrollToMessage}
+              onOpenPhoto={setPhotoOf}
+              accessToken={session?.access_token ?? null}
             />
           )}
         </View>
@@ -906,6 +922,17 @@ function ChatRoom({
         onRemoveMine={removeMyReaction}
       />
 
+      {/* One viewer for the whole screen, so a recycled row never keeps a
+          picture open. */}
+      <ImageViewer
+        source={(() => {
+          const m = photoOf ? messageMap.get(photoOf) : undefined;
+          if (!m) return null;
+          if (m.local_image) return { uri: m.local_image };
+          return m.image_path ? chatImageSource(m.image_path, session?.access_token ?? null) : null;
+        })()}
+        onClose={() => setPhotoOf(null)}
+      />
       {action && (
         <ActionOverlay
           anchor={action.anchor}
@@ -916,10 +943,14 @@ function ChatRoom({
             setAction(null);
           }}
           onReply={() => startReply(action.msg)}
-          onCopy={() => {
-            void Clipboard.setStringAsync(action.msg.body).catch(() => {});
-            setAction(null);
-          }}
+          onCopy={
+            action.msg.body
+              ? () => {
+                  void Clipboard.setStringAsync(action.msg.body).catch(() => {});
+                  setAction(null);
+                }
+              : null
+          }
           onClose={() => setAction(null)}
         />
       )}

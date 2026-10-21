@@ -17,6 +17,11 @@ import type { StyleProp, TextStyle } from "react-native";
 import type { PickedImage } from "@/data/chatImages";
 import type { GroupMember, Message } from "@/lib/types";
 
+/** A message as the chat holds it: the row, plus the sender's own copy of
+ *  a picture while the row is optimistic and until the next sync replaces
+ *  it. Native only, which is why it is not on the shared Message type. */
+export type ChatMessage = Message & { local_image?: string };
+
 /** The composer at the bottom of the chat screen: reply bar, textarea,
  *  send button and the mention typeahead floating above it. The screen
  *  owns keyboard avoidance; the composer is a plain View that reports its
@@ -26,7 +31,7 @@ export type ComposerProps = {
   members: GroupMember[];
   userId: string;
   /** The message being replied to, shown in the bar above the field. */
-  replyTo: Message | null;
+  replyTo: ChatMessage | null;
   onCancelReply: () => void;
   /**
    * Called with the trimmed body (empty for a picture alone), the mentioned

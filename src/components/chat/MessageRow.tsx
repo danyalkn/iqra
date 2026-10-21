@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { Reply } from "lucide-react-native";
-import { useEffect, useRef, useState, type ComponentRef } from "react";
+import { useEffect, useRef, type ComponentRef } from "react";
 import {
   Keyboard,
   Pressable,
@@ -24,14 +24,14 @@ import { Avatar } from "@/components/ui";
 import { Radius, Type } from "@/constants/theme";
 import { chatImageSource } from "@/data/chatImages";
 import { useTheme } from "@/hooks/use-theme";
-import type { GroupMember, Message, Reaction } from "@/lib/types";
-import { useSession } from "@/providers/SessionProvider";
+import type { GroupMember, Reaction } from "@/lib/types";
 
 import type { Anchor } from "./ActionOverlay";
-import { ImageViewer } from "./ImageViewer";
+import type { ChatMessage } from "./contracts";
 import { MessageBody } from "./MessageBody";
 import { ReactionChips } from "./ReactionChips";
 import {
+  DOUBLE_TAP_MS,
   LIST_PAD_RIGHT,
   LONG_PRESS_MS,
   messagePreview,
@@ -64,7 +64,7 @@ export type RowMeta = {
   /** Members whose read frontier stops at this message. */
   receipts: GroupMember[];
   /** The message this one replies to, when loaded. */
-  original: Message | undefined;
+  original: ChatMessage | undefined;
   /** "You replied to Yusuf", only for replies. */
   caption: string | null;
   /** timeLabel, or "…" while pending. */
@@ -74,9 +74,12 @@ export type RowMeta = {
 };
 
 export type MessageRowProps = {
-  msg: Message;
+  msg: ChatMessage;
   meta: RowMeta;
   memberNames: string[];
+  /** For a stored picture's download (src/data/chatImages.ts); passed down
+   *  rather than read per row so the list decides when rows re-render. */
+  accessToken: string | null;
   /** List-level "reveal times" offset: a left drag on ANY row translates
    *  every row (the web translated the whole column so all times show). */
   revealX: SharedValue<number>;
@@ -87,6 +90,8 @@ export type MessageRowProps = {
   onOpenReactors: (mid: string) => void;
   /** Tap on the quoted original: scroll to it. */
   onQuotePress: (mid: string) => void;
+  /** Tap on a picture: the screen opens it full screen. */
+  onOpenPhoto: (mid: string) => void;
 };
 
 /** Read-receipt avatar size, and the right-hand gutter every row keeps for
@@ -98,12 +103,12 @@ const RECEIPT_GUTTER = RECEIPT_RING + 4;
 const RECEIPT_OVERLAP = 8;
 const RECEIPT_FADE_MS = 220;
 
-/** Screen-reader stand-ins for the long press, swipe and Copy menu. */
-const A11Y_ACTIONS = [
-  { name: "react", label: "React" },
-  { name: "reply", label: "Reply" },
-  { name: "copy", label: "Copy" },
-];
+/** Screen-reader stand-ins for the long press, swipe, Copy and the
+ *  picture's tap (a nested button is out of a reader's reach). */
+const A11Y_REACT = { name: "react", label: "React" };
+const A11Y_REPLY = { name: "reply", label: "Reply" };
+const A11Y_COPY = { name: "copy", label: "Copy" };
+const A11Y_VIEW = { name: "view", label: "View photo" };
 
 /** "#rrggbb" at an alpha, for the web's border-accent/50 and bg-surface-2/70. */
 function withAlpha(hex: string, alpha: number): string {
@@ -138,12 +143,14 @@ export function MessageRow({
   msg,
   meta,
   memberNames,
+  accessToken,
   revealX,
   onPress,
   onLongPress,
   onSwipeReply,
   onOpenReactors,
   onQuotePress,
+  onOpenPhoto,
 }: MessageRowProps) {
   const c = useTheme();
   const {
@@ -167,15 +174,38 @@ export function MessageRow({
 
   // The picture, when there is one: the sender's own copy while it is on
   // this phone, else the stored object (downloaded once, then from disk).
-  const { session } = useSession();
   const photo = msg.local_image
     ? { uri: msg.local_image }
     : msg.image_path
-      ? chatImageSource(msg.image_path, session?.access_token ?? null)
+      ? chatImageSource(msg.image_path, accessToken)
       : null;
   const ratio = msg.image_w && msg.image_h ? msg.image_h / msg.image_w : 3 / 4;
   const photoHeight = Math.min(PHOTO_MAX_HEIGHT, Math.round(PHOTO_WIDTH * ratio));
-  const [viewing, setViewing] = useState(false);
+  // A tap on the picture counts toward the list's double tap (two within
+  // DOUBLE_TAP_MS make a heart) and opens the viewer only once that window
+  // has passed with no second tap.
+  const photoTap = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (photoTap.current) clearTimeout(photoTap.current);
+    },
+    [],
+  );
+  const handlePhotoPress = () => {
+    onPress(mid);
+    if (photoTap.current) {
+      clearTimeout(photoTap.current);
+      photoTap.current = null;
+      return;
+    }
+    photoTap.current = setTimeout(() => {
+      photoTap.current = null;
+      onOpenPhoto(mid);
+    }, DOUBLE_TAP_MS);
+  };
+  const a11yActions = pending
+    ? undefined
+    : [A11Y_REACT, A11Y_REPLY, ...(msg.body ? [A11Y_COPY] : []), ...(photo ? [A11Y_VIEW] : [])];
 
   // Swipe-right-to-reply offset for this row only (the web's swipeReply.x).
   const dragX = useSharedValue(0);
@@ -256,7 +286,10 @@ export function MessageRow({
         onSwipeReply(mid);
         break;
       case "copy":
-        void Clipboard.setStringAsync(msg.body).catch(() => {});
+        if (msg.body) void Clipboard.setStringAsync(msg.body).catch(() => {});
+        break;
+      case "view":
+        if (photo) onOpenPhoto(mid);
         break;
     }
   };
@@ -336,7 +369,7 @@ export function MessageRow({
               onPress={handlePress}
               onLongPress={pending ? undefined : handleLongPress}
               delayLongPress={LONG_PRESS_MS}
-              accessibilityActions={pending ? undefined : A11Y_ACTIONS}
+              accessibilityActions={a11yActions}
               onAccessibilityAction={handleA11yAction}
               style={[
                 styles.bubble,
@@ -361,7 +394,7 @@ export function MessageRow({
                 <Pressable
                   accessibilityRole="imagebutton"
                   accessibilityLabel="Photo"
-                  onPress={() => setViewing(true)}
+                  onPress={handlePhotoPress}
                   onLongPress={pending ? undefined : handleLongPress}
                   delayLongPress={LONG_PRESS_MS}
                   style={[styles.photoWrap, msg.body ? styles.photoAboveCaption : null]}
@@ -371,7 +404,9 @@ export function MessageRow({
                     style={[styles.photo, { height: photoHeight, backgroundColor: c.border }]}
                     contentFit="cover"
                     transition={150}
-                    recyclingKey={mid}
+                    // Stable across the temp-to-server id swap, so the
+                    // picture does not blink when the row is replaced.
+                    recyclingKey={msg.local_image ?? msg.image_path ?? mid}
                   />
                 </Pressable>
               )}
@@ -385,7 +420,6 @@ export function MessageRow({
               ) : null}
               <ReactionChips reactions={reactions} mine={mine} onOpen={handleChips} />
             </Pressable>
-            <ImageViewer source={viewing ? photo : null} onClose={() => setViewing(false)} />
 
             {/* Time revealed by swiping the conversation left. */}
             <View pointerEvents="none" style={styles.timeWrap}>

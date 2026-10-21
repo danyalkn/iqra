@@ -46,9 +46,6 @@ export type Message = {
   image_path: string | null;
   image_w: number | null;
   image_h: number | null;
-  /** Client only, never sent: the compressed copy on this phone, shown
-   *  while the row is optimistic and until the next sync replaces the row. */
-  local_image?: string;
 };
 
 /** A member's chat read frontier: the newest message time they have seen. */

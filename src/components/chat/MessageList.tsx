@@ -13,9 +13,10 @@ import { Type } from "@/constants/theme";
 import { useNow } from "@/hooks/use-now";
 import { useTheme } from "@/hooks/use-theme";
 import { chatStamp, localDate, timeLabel } from "@/lib/dates";
-import type { GroupMember, Message, Reaction } from "@/lib/types";
+import type { GroupMember, Reaction } from "@/lib/types";
 
 import type { Anchor } from "./ActionOverlay";
+import type { ChatMessage } from "./contracts";
 import { MessageRow, type RowMeta } from "./MessageRow";
 import { GAP_MS, isTemp, LIST_PAD_RIGHT, replyCaption } from "./shared";
 
@@ -70,19 +71,19 @@ const initialPin = (): PinState => ({
   windowH: -1,
 });
 
-const keyExtractor = (m: Message) => m.id;
+const keyExtractor = (m: ChatMessage) => m.id;
 
 export type MessageListProps = {
-  messages: Message[];
+  messages: ChatMessage[];
   userId: string;
   tz: string;
   memberMap: Map<string, GroupMember>;
   memberNames: string[];
-  messageMap: Map<string, Message>;
+  messageMap: Map<string, ChatMessage>;
   reactionsByMsg: Map<string, Reaction[]>;
   receiptsByMsg: Map<string, GroupMember[]>;
   flashId: string | null;
-  listRef: RefObject<FlashListRef<Message> | null>;
+  listRef: RefObject<FlashListRef<ChatMessage> | null>;
   /** Kept current from onScroll; the screen reads it before auto-scrolling. */
   atBottomRef: RefObject<boolean>;
   /** Two taps on a bubble within 300 ms (web: ❤️, like IG). */
@@ -91,6 +92,9 @@ export type MessageListProps = {
   onSwipeReply: (mid: string) => void;
   onOpenReactors: (mid: string) => void;
   onQuotePress: (mid: string) => void;
+  onOpenPhoto: (mid: string) => void;
+  /** The member's token for stored pictures (see MessageRow). */
+  accessToken: string | null;
 };
 
 /**
@@ -118,6 +122,8 @@ export function MessageList({
   onSwipeReply,
   onOpenReactors,
   onQuotePress,
+  onOpenPhoto,
+  accessToken,
 }: MessageListProps) {
   const c = useTheme();
   // chatStamp says "Today" / "Yesterday" against the wall clock; keying the
@@ -272,11 +278,14 @@ export function MessageList({
 
   // FlashList is a PureComponent: anything renderItem reads besides `data`
   // goes through extraData so a reaction, receipt or flash re-renders rows.
-  const extra = useMemo(() => ({ meta, memberNames }), [meta, memberNames]);
+  const extra = useMemo(
+    () => ({ meta, memberNames, accessToken }),
+    [meta, memberNames, accessToken],
+  );
 
   const renderItem = useCallback(
-    ({ item, extraData }: ListRenderItemInfo<Message>) => {
-      const { meta: rows, memberNames: names } = extraData as typeof extra;
+    ({ item, extraData }: ListRenderItemInfo<ChatMessage>) => {
+      const { meta: rows, memberNames: names, accessToken: token } = extraData as typeof extra;
       const m = rows.get(item.id);
       if (!m) return null;
       return (
@@ -284,16 +293,18 @@ export function MessageList({
           msg={item}
           meta={m}
           memberNames={names}
+          accessToken={token}
           revealX={revealX}
           onPress={handlePress}
           onLongPress={onLongPress}
           onSwipeReply={onSwipeReply}
           onOpenReactors={onOpenReactors}
           onQuotePress={onQuotePress}
+          onOpenPhoto={onOpenPhoto}
         />
       );
     },
-    [revealX, handlePress, onLongPress, onSwipeReply, onOpenReactors, onQuotePress],
+    [revealX, handlePress, onLongPress, onSwipeReply, onOpenReactors, onQuotePress, onOpenPhoto],
   );
 
   if (empty) {

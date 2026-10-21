@@ -15,7 +15,7 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
 import { Elevation, Radius, Type } from "@/constants/theme";
-import { pickChatImage, type PickedImage } from "@/data/chatImages";
+import { pickChatImage, PicturesUnavailableError, type PickedImage } from "@/data/chatImages";
 import { useTheme } from "@/hooks/use-theme";
 import type { GroupMember } from "@/lib/types";
 
@@ -91,6 +91,7 @@ export function Composer({
   // library is open or the copy is being made.
   const [image, setImage] = useState<PickedImage | null>(null);
   const [picking, setPicking] = useState(false);
+  const [pickError, setPickError] = useState<string | null>(null);
   // Field focused = keyboard up (the interactive swipe-down blurs it too).
   const [focused, setFocused] = useState(false);
   // Controlled only for the render after a mention pick (the web's
@@ -197,11 +198,17 @@ export function Composer({
   const pick = async () => {
     if (picking) return;
     setPicking(true);
+    setPickError(null);
     try {
       const picked = await pickChatImage();
       if (picked) setImage(picked);
     } catch (e) {
       console.warn("Picking a photo failed", e);
+      setPickError(
+        e instanceof PicturesUnavailableError
+          ? e.message
+          : "Couldn’t use that photo. Try another one.",
+      );
     } finally {
       setPicking(false);
     }
@@ -287,6 +294,10 @@ export function Composer({
               {Math.max(1, Math.round(image.bytes / 1024))} KB, ready to send
             </Text>
           </View>
+        )}
+
+        {pickError && (
+          <Text style={[Type.footnote, styles.pickError, { color: c.danger }]}>{pickError}</Text>
         )}
 
         <View style={styles.fieldRow}>
@@ -384,6 +395,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   thumb: { width: 72, height: 72, borderRadius: Radius.md },
+  pickError: { paddingHorizontal: 12, paddingTop: 8 },
   thumbClose: {
     position: "absolute",
     top: -6,

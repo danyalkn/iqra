@@ -17,6 +17,8 @@ export const GAP_MS = 60 * 60 * 1000;
 export const QUICK_EMOJI = ["❤️", "😂", "😮", "😢", "😡", "👍"] as const;
 
 export const LONG_PRESS_MS = 420;
+/** Two taps on one bubble within this make a heart (web: 300 ms). */
+export const DOUBLE_TAP_MS = 300;
 /** Drag a message this far to the right (points) to start a reply. */
 export const SWIPE_REPLY_TRIGGER = 52;
 /** Largest reply drag (points); the row rubber-bands past this. */
