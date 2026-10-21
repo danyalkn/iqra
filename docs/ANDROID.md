@@ -353,6 +353,77 @@ agent steps there (file, app.json `googleServicesFile`, `.gitignore`
 on `iqra-play` with the release APK (that is also the first release-build
 look at the bar), the member's move, docs.
 
+## Progress 2026-10-20 (session 2: push works, 1.1.0 APK built)
+
+Firebase is done. Project `iqra-b9e95` sits under the owner's Workspace
+organization (theqadamapp.com). That org blocks service account key
+downloads by default, so the owner overrode
+`iam.managed.disableServiceAccountKeyCreation` for the Iqra project only
+(Cloud console > IAM > Organization policies, "Override parent's policy",
+enforcement off). The org itself is still protected. The FCM V1 key is on
+EAS (expo.dev > iqra > Credentials > Android > FCM V1). The local copy
+was deleted. `google-services.json` and `googleServicesFile` landed in
+b114e2d and the `.gitignore` line in ed42577.
+
+Builds (`preview`, EAS): versionCode 2 died with "Gradle build daemon
+disappeared", and versionCode 3 (from ed42577) passed. A local release
+build failed the same way with `Metaspace`: the generated
+`gradle.properties` caps Gradle at `-Xmx2048m -XX:MaxMetaspaceSize=512m`.
+If EAS keeps failing like this, raise `org.gradle.jvmargs` through
+`expo-build-properties` or a small config plugin. **versionCode 4**
+(d4a6d388, from 14d5cf0, runtime 1.1.0) is the APK for the member. It
+has the tab bar fixes that 3 lacks. Do not send 3.
+
+**The emulator cannot test push on an EAS APK.** `register.ts` returns
+"unsupported" when `Device.isDevice` is false, and it is false on every
+emulator. The checklist ran on a local release build
+(`expo run:android --variant release`) with the line
+`node_modules/expo-device/build/Device.js` line 8 temporarily set to
+`isDevice = true` and restored right after. Same native config, same
+push JS as build 4.
+
+Results (`iqra-play`, throwaway in the Demo Circle, deleted after):
+
+- Token and row: FCM issues a token, and a `platform: "android"` row lands
+  in `push_subscriptions`. Toggle off deletes it, toggle on restores it,
+  sign-out deletes it. Pass.
+- `send_push` to the edge function to Expo to FCM: heads-up with sound,
+  channel `iqra` at importance 5, emerald accent. Pass.
+- Tap with the app in the background, or after a swipe-away (task gone,
+  process dead): lands on the push's `url` (Chat). Pass.
+- **Gap:** tap after the system killed the process with the task still in
+  Recents (`am kill`, what low-memory killing does) lands on **Today**,
+  not the push's `url`. Android recreates MainActivity from its old
+  LAUNCHER intent, so the FCM extras never reach expo-notifications. Not
+  fixed. Taps still open the app.
+- Tag replacement: two pushes with `tag: reminder` leave one notification.
+  Pass.
+- **Finding: no log buttons on Android while Iqra is closed or in the
+  background.** Expo's push service sends FCM *notification* messages
+  (`title`/`body`/`channelId` set), which Android draws itself, without
+  the category. The expo-notifications source says the only presented
+  data-only path "can not be triggered by expo push service, only when
+  using FCM directly" (`ExpoHandlingDelegate.kt`). A data-only test via
+  Expo woke the app headless (the task ran) but showed nothing. Buttons
+  appear only on pushes received while the app is open: Iqra's handler
+  draws those, with all three buttons. The owner decides whether that is
+  fine or worth the data-only redesign (see the summary in the session;
+  options: accept, or send Android reminders data-only and have
+  `task.ts` present them locally with the category, trading delivery
+  reliability on aggressive OEM battery savers).
+- Headless log, first real run of `task.ts`: with a button notification in
+  the tray and the app killed, "Log 1 page" wrote exactly one row
+  (reading, 1 page). The app stayed in the background and the
+  confirmation ("Logged 1 page. Streak: 1 day.") showed. Pass.
+- The revision nudge and the confirmations post on channel `iqra` (code).
+- Not run: `logHifz` buttons (same path as `logReading`), Expo receipts
+  (every ticket and receipt came back `ok`).
+
+Remaining: the member's move (owner sends the build 4 link, then
+"Moving the Android member over" above; the owner has not yet given his
+email or OK'd a test push), the owner's call on Android log buttons, and
+the HANDOFF status line once he has moved.
+
 ## Kickoff brief for the next session (paste as the first message)
 
 ```
