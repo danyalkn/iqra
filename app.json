@@ -56,6 +56,14 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Iqra shows your photo library only when you choose a picture to send in the chat.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
         "react-native-device-activity",
         {
           "appleTeamId": "69BV989JDV",
