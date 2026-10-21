@@ -59,10 +59,19 @@ import {
  * minimum) hides it.
  */
 
-/** How long the picker's debounced final selection may trail its Done. */
+/** How long the picker's debounced final selection may trail its Done
+ *  (the native view reports a change 100 ms after it happens). */
 const PICKER_SETTLE_MS = 400;
 
-type Picker = { purpose: "enable" | "change"; initial: string | null };
+/** A breath between the system access sheet closing and the picker sheet
+ *  presenting, so the second is not swallowed by the first's dismissal. */
+const AFTER_ACCESS_MS = 500;
+
+/** `key` makes each opening a fresh native view: the sheet presents on
+ *  the view's first appearance only, so a reused one would show nothing. */
+type Picker = { purpose: "enable" | "change"; initial: string | null; key: number };
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export function FocusCard() {
   const c = useTheme();
@@ -80,6 +89,8 @@ export function FocusCard() {
   const [error, setError] = useState<string | null>(null);
   const [picker, setPicker] = useState<Picker | null>(null);
   const picked = useRef<string | null>(null);
+  const closing = useRef(false);
+  const openings = useRef(0);
   const busyRef = useRef(false);
 
   // Everything is read in the callback, after the stored state lands, so
@@ -116,6 +127,13 @@ export function FocusCard() {
     setBusy(b);
   };
 
+  const openPicker = (purpose: Picker["purpose"], initial: string | null) => {
+    picked.current = null;
+    closing.current = false;
+    openings.current += 1;
+    setPicker({ purpose, initial, key: openings.current });
+  };
+
   // Access first, then the picker. The system sheet can be shown again
   // after a refusal, so the "Allow access" button comes here too; with
   // Focus already on (access revoked in Settings, then granted again) the
@@ -135,9 +153,9 @@ export function FocusCard() {
       refresh();
       return;
     }
+    await wait(AFTER_ACCESS_MS);
     setBusyBoth(false);
-    picked.current = null;
-    setPicker({ purpose: "enable", initial: null });
+    openPicker("enable", null);
   };
 
   const turnOff = async () => {
@@ -148,19 +166,20 @@ export function FocusCard() {
     refresh();
   };
 
-  const changeApps = () => {
-    picked.current = null;
-    setPicker({ purpose: "change", initial: savedSelection() });
-  };
+  const changeApps = () => openPicker("change", savedSelection());
 
   // Cancel and Done both end here with no say which; the selection the
   // picker last reported decides. Nothing reported means cancelled (or
-  // everything deselected), which changes nothing.
+  // everything deselected), which changes nothing. The anchor stays
+  // mounted through the settle so a selection reported after the sheet
+  // closed still arrives.
   const onPickerClosed = () => {
+    if (closing.current) return;
+    closing.current = true;
     const purpose = picker?.purpose;
-    setPicker(null);
     setTimeout(async () => {
       const token = picked.current;
+      setPicker(null);
       if (!token || !purpose) return;
       setBusyBoth(true);
       setError(null);
@@ -169,7 +188,7 @@ export function FocusCard() {
         else await changeSelection(ctx, token);
       } catch (e) {
         console.warn("Focus enable failed", e);
-        setError("Couldn’t turn Focus on. Check that Iqra still has Screen Time access, then try again.");
+        setError("Couldn’t turn Focus on. Check Iqra under Settings > Screen Time, then try again.");
       }
       setBusyBoth(false);
       refresh();
@@ -276,6 +295,7 @@ export function FocusCard() {
           // An invisible anchor: the native side presents Apple's picker as
           // a sheet from it and reports Cancel/Done through onDismissRequest.
           <SelectionSheet
+            key={picker.key}
             style={styles.anchor}
             {...(picker.initial ? { familyActivitySelection: picker.initial } : {})}
             onSelectionChange={(e) => {
