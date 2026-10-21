@@ -243,13 +243,28 @@ overnight) are still to run. The owner parked a follow-up idea: an
 unlock goal (pages or "my Sabak") shown as progress on the shield
 itself; not building it now.
 
+**iOS 1.0.0 received this JS (2026-10-21, update group 197beb34).** The
+owner wanted the circle to see chat pictures before the 1.2.0 build, so
+the whole of main went to the TestFlight 1.0.0 build by EAS update
+(production channel; app.json held at 1.0.0 for the publish and restored,
+the runtime follows the version). Proven first on the simulator's old
+dev client (built 2026-10-17, no Screen Time, picker or resizer
+modules): launches to sign-in, nothing in Metro's log. On that build
+Focus is hidden (its require fails soft, 411d736) and the photo button
+says "Update Iqra to send pictures."; pictures from others display.
+Android gets nothing (its APK runtime is 1.0.0 too, but it lacks the
+push and blur modules the JS now imports; see ANDROID.md).
+
 Next, in order (FOCUS.md § 6 is the detail):
 
-1. Owner: `npx eas-cli@latest build --profile development --platform ios`
-   interactively (EAS needs the Apple login once to create provisioning
-   profiles for the three extension ids; non-interactive failed on
-   exactly that). Installing it replaces the TestFlight app (data kept).
-   The owner then runs Metro (`npx expo start --port 8082`).
+1. ~~Owner: the interactive development build~~ Done 2026-10-21: builds
+   5 and 6 (the latter non-interactive, with the picture modules) are on
+   the owner's phone; Metro on 8082 serves it. **The production build
+   needs the same one-time interactive run** for the extensions' App
+   Store profiles: `npx eas-cli@latest build --profile production --platform ios`
+   (non-interactive stopped at "Distribution Certificate is not
+   validated"); after that, `eas submit --platform ios --latest` is
+   non-interactive (ASC key).
 2. Check the portal after the build: Family Controls (Distribution) on all
    four App IDs (the owner ticked them 2026-10-21; EAS's capability sync
    has failed silently for others, eas-cli issue 2715).
