@@ -3,17 +3,23 @@ import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { useFocusEffect } from "expo-router";
 import { MessageCircle, Users, WifiOff } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   AppState,
   Keyboard,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { KeyboardAvoidingView, useKeyboardHandler } from "react-native-keyboard-controller";
+import {
+  KeyboardAvoidingView,
+  useKeyboardHandler,
+  useReanimatedKeyboardAnimation,
+} from "react-native-keyboard-controller";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 
@@ -43,6 +49,50 @@ type LoadState = "loading" | "ready" | "failed";
  *  already keeps the web's py-2.5 (10) under the field on top of
  *  `bottomPadding`, and that is the gap the web had above the keyboard. */
 const KEYBOARD_GAP = 0;
+
+/**
+ * Keeps the composer on the keyboard. The screen runs to the window bottom
+ * under the floating tab bar on both platforms, and the composer pads the
+ * bar clearance itself while the keyboard is closed.
+ *
+ * iOS: keyboard-controller's KeyboardAvoidingView, which pads by
+ * (keyboard height + keyboardVerticalOffset); the negative offset of
+ * (clearance - gap) makes that padding plus the composer's own clearance
+ * end KEYBOARD_GAP above the keyboard. Verified on the owner's phone.
+ *
+ * Android: a plain animated pad. The KeyboardAvoidingView derives its
+ * padding from a frame it measures at mount plus an async window position
+ * (automaticOffset), and on the emulator that frame came out 112 dp short
+ * in some runs (2026-10-20), which left the field under the keyboard with
+ * no way to tell from the code. Nothing here needs measuring: the pad is
+ * the keyboard height less the bar clearance, so the field ends
+ * KEYBOARD_GAP above the keyboard while the glass bar is off screen.
+ */
+function KeyboardSpace({ clearance, children }: { clearance: number; children: ReactNode }) {
+  if (Platform.OS === "android") {
+    return <AndroidKeyboardPad clearance={clearance}>{children}</AndroidKeyboardPad>;
+  }
+  return (
+    <KeyboardAvoidingView
+      behavior="padding"
+      automaticOffset
+      keyboardVerticalOffset={KEYBOARD_GAP - clearance}
+      style={styles.flex}
+    >
+      {children}
+    </KeyboardAvoidingView>
+  );
+}
+
+function AndroidKeyboardPad({ clearance, children }: { clearance: number; children: ReactNode }) {
+  // keyboard-controller reports the keyboard's height from the window
+  // bottom (negative while it is up, in the reanimated context).
+  const { height } = useReanimatedKeyboardAnimation();
+  const pad = useAnimatedStyle(() => ({
+    paddingBottom: Math.max(0, Math.abs(height.get()) - clearance + KEYBOARD_GAP),
+  }));
+  return <Animated.View style={[styles.flex, pad]}>{children}</Animated.View>;
+}
 
 const SEND_ERROR = "Couldn’t send that message. Check your connection and try again.";
 const STALE_ERROR = "Can’t reach the chat right now. Retrying…";
@@ -739,17 +789,9 @@ function ChatRoom({
     [reactors, messageMap, toggleReaction, closeReactors],
   );
 
-  // The screen runs under the floating tab bar on both platforms (iOS: the
-  // system Liquid Glass bar; Android: our glass bar), so the composer
-  // carries the bar clearance (useTabBarClearance) while the keyboard is
-  // closed. The keyboard-controller KeyboardAvoidingView pads by
-  // (keyboard height + keyboardVerticalOffset), same sign as RN's; a
-  // negative offset of (clearance - gap) makes that padding plus the
-  // composer's own clearance end KEYBOARD_GAP above the keyboard. On
-  // Android the bar slides off screen while the keyboard is open, so the
-  // field sits on the keyboard there too.
+  // The composer carries the bar clearance (useTabBarClearance) while the
+  // keyboard is closed; KeyboardSpace lifts it onto the keyboard.
   const bottomPadding = barClearance;
-  const keyboardVerticalOffset = KEYBOARD_GAP - barClearance;
 
   const banner = sendError ?? (loadState === "ready" && stale ? STALE_ERROR : null);
 
@@ -761,12 +803,7 @@ function ChatRoom({
         onPress={() => setShowMembers(true)}
       />
 
-      <KeyboardAvoidingView
-        behavior="padding"
-        automaticOffset
-        keyboardVerticalOffset={keyboardVerticalOffset}
-        style={styles.flex}
-      >
+      <KeyboardSpace clearance={barClearance}>
         {banner && (
           <View style={[styles.banner, { backgroundColor: c.dangerTint }]}>
             <Text style={[Type.footnote, { color: c.danger }]}>{banner}</Text>
@@ -812,7 +849,7 @@ function ChatRoom({
           focusRequest={focusRequest}
           bottomPadding={bottomPadding}
         />
-      </KeyboardAvoidingView>
+      </KeyboardSpace>
 
       <MembersSheet
         open={showMembers}
