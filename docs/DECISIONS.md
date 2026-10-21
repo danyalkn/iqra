@@ -169,8 +169,8 @@ in `docs/SCREEN-TIME.md`, build notes in `docs/FOCUS.md` and SCREEN-TIME's
   here or elsewhere) brings the block back at once.
 - **Opaque tokens only.** Iqra never learns app names; the card shows
   counts ("3 apps, 1 category").
-- **Shield copy:** title "Iqra", subtitle "Log today's Quran in Iqra to
-  unlock this app.", secondary "Not now". The primary button is "Open
+- **Shield copy:** title "Iqra", subtitle "Log some Quran today in Iqra to
+  unlock this app." (owner's wording), secondary "Not now". The primary button is "Open
   Iqra" on iOS 26.5 and later, where Apple lets a shield open the app that
   applied it; on earlier iOS it is "Remind me" and posts a local
   notification with the member's log buttons, since no shield button could

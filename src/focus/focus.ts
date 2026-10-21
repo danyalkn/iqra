@@ -131,7 +131,7 @@ function shieldCanOpenApp(): boolean {
 function shieldLook(canOpen: boolean): DeviceActivity.ShieldConfiguration {
   return {
     title: "Iqra",
-    subtitle: "Log today's Quran in Iqra to unlock this app.",
+    subtitle: "Log some Quran today in Iqra to unlock this app.",
     iconSystemName: "book.closed.fill",
     iconTint: ACCENT,
     primaryButtonLabel: canOpen ? "Open Iqra" : "Remind me",
@@ -164,7 +164,7 @@ function shieldButtons(mode: Mode, canOpen: boolean): DeviceActivity.ShieldActio
           type: "sendNotification",
           payload: {
             title: "Iqra",
-            body: "Log today's Quran to unlock your apps.",
+            body: "Log some Quran today to unlock your apps.",
             categoryIdentifier: hifz ? CATEGORY.hifz : CATEGORY.reading,
             userInfo: { url: hifz ? "/today?log=sabak" : "/today?log=reading", tag: "focus" },
             interruptionLevel: "active",

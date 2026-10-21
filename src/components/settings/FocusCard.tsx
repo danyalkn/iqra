@@ -222,7 +222,7 @@ export function FocusCard() {
     note =
       "Iqra needs Screen Time access to block apps. Allow it when asked, or under Settings > Screen Time, then reopen Iqra.";
   } else if (status === "off") {
-    note = "Block the apps you choose until you’ve logged today’s Quran. Only on this phone, only for you.";
+    note = "Block the apps you choose until you’ve logged some Quran today. Only on this phone, only for you.";
   } else if (status === "unlocked") {
     note = `${summary || "Your apps"}. Unlocked for today, blocked again from midnight.`;
   } else if (status === "paused") {
@@ -326,7 +326,7 @@ function ComingSoon() {
               Block apps until you’ve logged
             </Text>
             <Text style={[Type.footnote, { color: c.muted }]}>
-              Block the apps you choose until you’ve logged today’s Quran. Coming soon to Android.
+              Block the apps you choose until you’ve logged some Quran today. Coming soon to Android.
             </Text>
           </View>
         </View>
