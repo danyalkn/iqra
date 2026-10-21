@@ -377,6 +377,16 @@ function LogForm({
   const autoAdvance = autoPage && !backdating;
   // The location we'll actually store for this reading.
   const finalLoc = autoAdvance ? autoLoc : readLoc;
+  // A bookmark is the last page read to its end, so name the page today's
+  // reading begins on too. After a khatm the pages clamp at the last page
+  // (readingEntry), so there is no next page to name.
+  const autoNote = !autoPage
+    ? "Enter the last page you finished."
+    : lastReadPage == null
+      ? "Counts from the start of the Qur’an."
+      : lastReadPage < maxPage
+        ? `You finished p.${lastReadPage} last time, so this starts at p.${lastReadPage + 1}.`
+        : `Adds your pages onto p.${lastReadPage}.`;
 
   // Numbers only - up to 2 decimal places for pages, integer for the page no.
   const onPagesReadChange = (v: string) => {
@@ -499,13 +509,7 @@ function LogForm({
                   <Text style={[Type.callout, styles.semibold, { color: c.foreground }]}>
                     Continue from last page
                   </Text>
-                  <Text style={[Type.footnote, { color: c.muted }]}>
-                    {autoPage
-                      ? lastReadPage != null
-                        ? `Adds your pages onto p.${lastReadPage}.`
-                        : "Counts from the start of the Qur’an."
-                      : "Enter the last page yourself."}
-                  </Text>
+                  <Text style={[Type.footnote, { color: c.muted }]}>{autoNote}</Text>
                 </View>
                 <Switch
                   value={autoPage}
@@ -518,10 +522,13 @@ function LogForm({
             {autoAdvance ? (
               <View style={styles.locRow}>
                 {finalLoc ? (
-                  <LocationPill
-                    text={`Now on p.${finalLoc.page} · Juz ${finalLoc.juz} · ${finalLoc.surah.name}`}
-                    arabic={finalLoc.surah.arabic}
-                  />
+                  <>
+                    <LocationPill
+                      text={`Finished p.${finalLoc.page} · Juz ${finalLoc.juz} · ${finalLoc.surah.name}`}
+                      arabic={finalLoc.surah.arabic}
+                    />
+                    <NextStartHint page={finalLoc.page} maxPage={maxPage} />
+                  </>
                 ) : (
                   <Text style={[Type.footnote, { color: c.faint }]}>
                     Enter pages read to set your bookmark
@@ -532,23 +539,26 @@ function LogForm({
               <View style={styles.manual}>
                 <FieldLabel style={styles.labelTight}>
                   {backdating
-                    ? "Last page you read yesterday (optional)"
-                    : "Last page you read (optional)"}
+                    ? "Last page you finished yesterday (optional)"
+                    : "Last page you finished (optional)"}
                 </FieldLabel>
                 <Input
                   keyboardType="number-pad"
                   placeholder={`1–${maxPage}`}
                   value={stoppedAt}
                   onChangeText={onStoppedChange}
-                  accessibilityLabel="Last page you read"
+                  accessibilityLabel="Last page you finished"
                   style={styles.lastPageInput}
                 />
                 <View style={styles.locRowTight}>
                   {readLoc ? (
-                    <LocationPill
-                      text={`Juz ${readLoc.juz} · ${readLoc.surah.name}`}
-                      arabic={readLoc.surah.arabic}
-                    />
+                    <>
+                      <LocationPill
+                        text={`Juz ${readLoc.juz} · ${readLoc.surah.name}`}
+                        arabic={readLoc.surah.arabic}
+                      />
+                      <NextStartHint page={readLoc.page} maxPage={maxPage} />
+                    </>
                   ) : stoppedAt ? (
                     <Text style={[Type.footnote, { color: c.faint }]}>
                       Enter a page from 1 to {maxPage}
@@ -724,6 +734,20 @@ function LocationPill({ text, arabic }: { text: string; arabic: string }) {
   );
 }
 
+/** Spells out what a bookmark page means: read to its end, so the next
+ *  session starts on the page after (p.1 again after a khatm). "Now on p.80"
+ *  alone read as "start on p.80". */
+function NextStartHint({ page, maxPage }: { page: number; maxPage: number }) {
+  const c = useTheme();
+  return (
+    <Text style={[Type.footnote, styles.nextStart, { color: c.muted }]}>
+      {page >= maxPage
+        ? `Read to the end of p.${page}, the last page. Next time, start again from p.1.`
+        : `Read to the end of p.${page}, so next time start from p.${page + 1}.`}
+    </Text>
+  );
+}
+
 /** Nudge toward giving a position, without making it mandatory. */
 function StartHint() {
   const c = useTheme();
@@ -764,8 +788,11 @@ const styles = StyleSheet.create({
   grow: { flex: 1, minWidth: 0 },
   semibold: { fontWeight: "600" },
   medium: { fontWeight: "500" },
-  locRow: { marginTop: 12, height: 36, alignItems: "center", justifyContent: "center" },
-  locRowTight: { height: 36, alignItems: "center", justifyContent: "center" },
+  // Room for the pill and its next-page line, held while empty so the sheet
+  // doesn't jump as the first digit is typed. A wrapped line still grows it.
+  locRow: { marginTop: 12, minHeight: 56, alignItems: "center", justifyContent: "center", gap: 6 },
+  locRowTight: { minHeight: 56, alignItems: "center", justifyContent: "center", gap: 6 },
+  nextStart: { textAlign: "center", paddingHorizontal: 4 },
   manual: { marginTop: 12, alignItems: "center", gap: 8 },
   pill: {
     flexDirection: "row",

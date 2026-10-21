@@ -980,15 +980,21 @@ export default function TodayScreen() {
               </View>
             )}
 
-            {/* Resume-from bookmark - shows the next page to start on. */}
+            {/* Resume-from bookmark - shows the next page to start on, and
+                the page it follows, so neither reads as the other. */}
             {!loadFailed && startPage != null && (
               <View style={styles.bookmarkWrap}>
                 <View style={[styles.bookmark, { backgroundColor: c.accentTint }]}>
                   <Bookmark size={16} color={c.accent} />
-                  <Text style={[Type.footnote, styles.medium, styles.bookmarkText, { color: c.accent }]}>
-                    {finished ? "Khatm done 🎉 Start again from" : "Start from"} p.{startPage} ·{" "}
-                    {bookmarkLabel(lastMushaf, startPage)}
-                  </Text>
+                  <View style={styles.bookmarkText}>
+                    <Text style={[Type.footnote, styles.medium, { color: c.accent }]}>
+                      {finished ? "Khatm done 🎉 Start again from" : "Start from"} p.{startPage} ·{" "}
+                      {bookmarkLabel(lastMushaf, startPage)}
+                    </Text>
+                    <Text style={[Type.footnote, { color: c.muted }]}>
+                      You read to the end of p.{lastPage}
+                    </Text>
+                  </View>
                 </View>
               </View>
             )}
