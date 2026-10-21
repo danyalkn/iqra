@@ -9,7 +9,7 @@ import {
 } from "expo-router/ui";
 import {
   CalendarCheck,
-  ChartColumn,
+  ChartNoAxesColumn,
   CircleUserRound,
   MessageCircle,
   Users,
@@ -102,13 +102,13 @@ export default function AndroidTabs() {
             <TabButton label="Today" icon={CalendarCheck} />
           </TabTrigger>
           <TabTrigger name="feed" href="/feed" asChild>
-            <TabButton label="Feed" icon={Users} />
+            <TabButton label="Feed" icon={Users} fillGlyph={false} />
           </TabTrigger>
           <TabTrigger name="chat" href="/chat" asChild>
             <TabButton label="Chat" icon={MessageCircle} />
           </TabTrigger>
           <TabTrigger name="stats" href="/stats" asChild>
-            <TabButton label="Insights" icon={ChartColumn} />
+            <TabButton label="Insights" icon={ChartNoAxesColumn} />
           </TabTrigger>
           <TabTrigger name="profile" href="/profile" asChild>
             <TabButton label="Profile" icon={CircleUserRound} />
@@ -214,6 +214,10 @@ type TabButtonProps = Omit<TabTriggerSlotProps, "ref"> & {
   ref?: Ref<ViewRef>;
   label: string;
   icon: LucideIcon;
+  /** Faint accent fill inside the selected glyph. Off for glyphs drawn
+   *  with open paths (Users), where a fill paints wedges between the
+   *  strokes instead of a body (emulator check 2026-10-20). */
+  fillGlyph?: boolean;
 };
 
 /**
@@ -226,6 +230,7 @@ type TabButtonProps = Omit<TabTriggerSlotProps, "ref"> & {
 function TabButton({
   label,
   icon: Icon,
+  fillGlyph = true,
   isFocused,
   href: _href,
   style: _style,
@@ -247,12 +252,15 @@ function TabButton({
         {/* Lucide has no filled variants, so the selected glyph gets a
             faint accent fill inside its outline, the part the SF Symbol
             .fill variants play on iOS, without losing the inner detail
-            (the person in the circle, the calendar's check). */}
+            (the person in the circle, the calendar's check). Insights uses
+            the axis-less column glyph (three bars, like Material's
+            bar_chart and SF's chart.bar): the axis variant filled into a
+            wedge on the emulator. */}
         <Icon
           size={22}
           color={color}
           strokeWidth={selected ? 2.4 : 1.8}
-          fill={selected ? hexToRgba(c.accent, 0.18) : "none"}
+          fill={selected && fillGlyph ? hexToRgba(c.accent, 0.18) : "none"}
         />
         {/* The system bars do not grow tab labels with the font scale;
             1.2 keeps "Insights" and the capsule inside a 63dp item on a
