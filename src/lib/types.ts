@@ -34,10 +34,21 @@ export type Message = {
   id: string;
   group_id: string;
   user_id: string;
+  /** The text, or the caption of a picture; "" for a picture alone. */
   body: string;
   mentions: string[];
   reply_to: string | null;
   created_at: string;
+  /** A picture sent with the message: its object in the chat-images bucket
+   *  (`<group id>/<uuid>.jpg`) and its pixel size, so a row can reserve the
+   *  right height before the bytes arrive. Null for text messages. Added
+   *  2026-10-21; rows from before carry nulls. */
+  image_path: string | null;
+  image_w: number | null;
+  image_h: number | null;
+  /** Client only, never sent: the compressed copy on this phone, shown
+   *  while the row is optimistic and until the next sync replaces the row. */
+  local_image?: string;
 };
 
 /** A member's chat read frontier: the newest message time they have seen. */
