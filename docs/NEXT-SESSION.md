@@ -283,12 +283,12 @@ Decisions taken while building, refining the plan above:
    extension is `.ActivityMonitorExtension`). Not confirmed filed.
 4. **TestFlight public link** for the circle; Test Information > Privacy
    Policy URL (optional but cheap).
-5. **Android push**: Firebase project, `google-services.json`, FCM V1 key
-   via `eas credentials` (needs the owner's Google login once).
-   Full plan, owner steps and the member's move off the PWA:
-   `docs/ANDROID.md` (2026-10-20).
-   The Android glass tab bar is done and in `main` (2026-10-20); the
-   1.1.0 APK with both waits on the Firebase steps.
+5. **Android 1.1.0**: done 2026-10-20 (Firebase, FCM V1 key on EAS, the
+   glass tab bar, EAS build 4 verified). Open, all owner-side: the Android
+   member's email, sending him the build 4 page, the OK for a test push to
+   him, the OK to delete his web push rows, and the call on Android log
+   buttons (background reminders show none on Android). Details and the
+   install link: `docs/ANDROID.md` "Build 4 verified".
 6. Later: **Unlisted App Store distribution** (no orange beta dot, no
    90-day expiry); App Privacy answers are in PHASE4.md ship step 6.
 7. Open product question: member 39587991 is on Juz 29 and may memorize

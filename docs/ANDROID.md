@@ -347,11 +347,9 @@ serial. The emulator crashed twice under host load (the review workflow,
 an export and gradle were running at once); run it alone. `supabase db
 query` prints only the last statement's rows.
 
-Remaining, in order: owner Firebase steps 1 to 5 (section 1), then the
-agent steps there (file, app.json `googleServicesFile`, `.gitignore`
-`*firebase-adminsdk*.json`, expo-doctor), the build, the push checklist
-on `iqra-play` with the release APK (that is also the first release-build
-look at the bar), the member's move, docs.
+Superseded the same evening: a second session did Firebase, push and
+the build in parallel (next section), and session 1 then verified build 4.
+See "Build 4 verified" below for what remains.
 
 ## Progress 2026-10-20 (session 2: push works, 1.1.0 APK built)
 
@@ -423,6 +421,51 @@ Remaining: the member's move (owner sends the build 4 link, then
 "Moving the Android member over" above; the owner has not yet given his
 email or OK'd a test push), the owner's call on Android log buttons, and
 the HANDOFF status line once he has moved.
+
+## Build 4 verified (2026-10-20, session 1, release binary)
+
+Offline, from the EAS artifact (`eas build:download --build-id
+d4a6d388-9028-492c-a358-1fef13c19a79`): `versionCode 4`, `versionName
+1.1.0`, arm64-v8a only, Firebase `project_id iqra-b9e95` and
+`gcm_defaultSenderId 285973472160` in the resources, and the Hermes bundle
+carries the tab bar fixes (`AndroidKeyboardPad`, `renderEveryTab`,
+`ChartNoAxesColumn`, `useReselectScrollToTop`) plus `ExpoBlur`.
+
+On `iqra-play` (API 35), build 4 installed over 3, signed in with the push
+session's throwaway (deleted after, zero rows confirmed by both sessions):
+
+- Cold launch, first tap on Profile: Profile is in the first dump 0.3 s
+  after the tap (eager mounting holds in release).
+- Chat keyboard: field bottom 1818 px against the IME top at 1848 px, a
+  10 dp gap, "Hide keyboard" chevron beside the field.
+- Re-tap on a scrolled Profile returns the title to y 240. Back from Feed
+  selects Today; back from Today goes to the launcher with the process
+  alive; reopening shows Today.
+- Light and dark Today, dark Feed with a chip frosted under the bar, the
+  three-bar Insights glyph: as designed.
+
+Push could not be re-run on build 4 itself (emulator gate on
+`Device.isDevice`, previous section); the push JS and native config are
+the same as the patched local build the checklist ran on.
+
+**What the owner still decides or does** (nothing ships until then):
+
+1. Which member is on Android (the push rows suggest saim.rasheed or
+   amanmarkar), and send him the build 4 install page:
+   https://expo.dev/accounts/danyal0726/projects/iqra/builds/d4a6d388-9028-492c-a358-1fef13c19a79
+   (installs over the 1.0.0 APK; Android warns about unknown sources).
+2. He signs in with his PWA email and turns on Profile > Notifications; an
+   agent then checks for his `platform: "android"` row.
+3. OK for one test push to him (a real member).
+4. OK to delete his web push rows (`subscription ? 'endpoint'`) once the
+   Android push landed; then he removes the PWA from his home screen and
+   sets Iqra's battery use to Unrestricted if reminders run late.
+5. The call on Android log buttons (previous section): accept that
+   background reminders have no "Log 1 page" buttons on Android, or ask
+   for the data-only redesign.
+6. Then update HANDOFF Phase 5 (the member has moved) and NEXT-SESSION
+   owner check 5. From then on Android JS updates go to runtime 1.1.0:
+   `npx eas-cli@latest update --channel preview --environment preview --platform android --message "..." --non-interactive`.
 
 ## Kickoff brief for the next session (paste as the first message)
 
