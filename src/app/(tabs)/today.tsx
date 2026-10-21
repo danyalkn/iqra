@@ -46,7 +46,7 @@ import {
   fetchMyRecentEntries,
   type HifzHistoryRow,
 } from "@/data/entryReads";
-import { noteLogged } from "@/focus/controls";
+import { forgetToday, noteLogged } from "@/focus/controls";
 import { useMembership } from "@/hooks/use-membership";
 import { useOutbox } from "@/hooks/use-outbox";
 import { useNow } from "@/hooks/use-now";
@@ -590,13 +590,20 @@ export default function TodayScreen() {
     [entries, tz, today],
   );
 
-  // Focus: an entry dated today from anywhere (the web, another phone, a
-  // notification button) unlocks this phone's blocked apps once it shows
-  // here (src/focus/controls.ts). A no-op when the day is already known.
+  // Focus follows this list, both ways (src/focus/controls.ts): an entry
+  // dated today from anywhere (the web, another phone, a notification
+  // button) unlocks this phone's blocked apps once it shows here, and a
+  // list for today that is empty once a read has landed (or the saved
+  // copy is up) brings the block back, since the entry was deleted here
+  // or elsewhere. "loading" and "failed" with nothing saved say nothing.
   useEffect(() => {
-    if (!userId || todayEntries.length === 0) return;
-    void noteLogged({ userId, tz, mode }, todayEntries[0].logged_at);
-  }, [userId, tz, mode, todayEntries]);
+    if (!userId) return;
+    if (todayEntries.length > 0) {
+      void noteLogged({ userId, tz, mode }, todayEntries[0].logged_at);
+    } else if (loadState === "ready") {
+      void forgetToday({ userId, tz, mode });
+    }
+  }, [userId, tz, mode, todayEntries, loadState]);
   const filtered = todayEntries.filter((e) =>
     filter === "all" ? true : bucketOf(e.entry_type) === filter,
   );

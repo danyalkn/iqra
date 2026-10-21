@@ -116,6 +116,30 @@ export function noteLogged(ctx: FocusContext, loggedAt: string): Promise<void> {
   });
 }
 
+/**
+ * Today's list for today is empty after a read that landed (or from the
+ * saved copy): whatever this phone noted for today is gone, deleted here
+ * or on another device, so the block comes back at once (owner,
+ * 2026-10-21: Focus follows what Today shows, in both directions). A no-op
+ * unless the noted day is today or later.
+ */
+export function forgetToday(ctx: FocusContext): Promise<void> {
+  return serial(async () => {
+    if (!focusAvailable()) return;
+    try {
+      const stored = await readStoredFocus();
+      if (stored && stored.userId !== ctx.userId) return;
+      const state = await readFocusState(ctx.userId);
+      if (!state.lastLoggedDay || state.lastLoggedDay < todayLocal(ctx.tz)) return;
+      const next = { ...state, lastLoggedDay: null };
+      await writeFocusState(ctx.userId, next);
+      applyState(next, ctx.tz);
+    } catch (e) {
+      console.warn("Focus re-block failed", e);
+    }
+  });
+}
+
 /** After the picker closed with something picked: save the apps, store the
  *  shield's look, register the midnight schedule and block or unblock for
  *  today. Rejects when Screen Time refuses the schedule, with Focus left
