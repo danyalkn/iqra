@@ -14,8 +14,9 @@ Two tiers of the `com.apple.developer.family-controls` entitlement:
 - **Distribution**: required for TestFlight and App Store builds. Must be
   requested from Apple and approved per bundle id.
 
-Request form: Apple Developer -> Account -> search "Family Controls" or go
-to the "Request the Family Controls (Distribution) capability" page. Notes:
+Request form: https://developer.apple.com/contact/request/family-controls-distribution
+(sign-in required, so the exact fields cannot be checked from here).
+Notes:
 
 - Submit as the org's **Account Holder**. Admins get rejected or ignored.
 - One request per bundle id. Four total:
@@ -28,21 +29,70 @@ to the "Request the Family Controls (Distribution) capability" page. Notes:
   `ActivityMonitorExtension`, `ShieldConfiguration`, `ShieldAction`
   (checked in the package source 2026-10-17; `.DeviceActivityMonitor` is
   `expo-app-blocker`'s name, a different library). Ids are case-sensitive.
+  The library README lists `.ActivityMonitor`; that is stale. Rechecked
+  2026-10-21: `@kingstinct/expo-apple-targets` 0.1.19 (`withWidget.js`)
+  builds `<main id>.<folder name>` when the target config sets no
+  `bundleIdentifier`, and none of the three do.
 - All four must share one App Group (`group.com.qadamtechnologies.iqra`), or provisioning
   fails silently for the missing target.
 - After approval: Identifiers -> each App ID -> Additional Capabilities ->
   enable Family Controls (Distribution). Then let EAS regenerate profiles
   (`eas credentials` or just rebuild).
 
-Suggested description (adapt, keep it specific):
+Form text (final, 2026-10-21). Each request starts with its own opening
+line, then the shared description below it.
 
-> Iqra is a Quran reading habit tracker for a small private study circle.
-> Users opt in to select apps with FamilyActivityPicker. The app applies a
-> ManagedSettings shield to those apps until the user logs their daily
-> reading in Iqra, and uses a DeviceActivity schedule to re-apply the shield
-> each day. Authorization is `.individual`, for the user's own device only.
-> The app never accesses the identity of the selected apps; it only stores
-> the opaque tokens. No parental or remote monitoring.
+Opening lines:
+
+1. `com.qadamtechnologies.iqra`: "This request is for the main Iqra app
+   (com.qadamtechnologies.iqra). Separate requests cover its three Screen
+   Time extensions: .ActivityMonitorExtension, .ShieldConfiguration and
+   .ShieldAction."
+2. `.ActivityMonitorExtension`: "This request is for Iqra's
+   DeviceActivityMonitor extension
+   (com.qadamtechnologies.iqra.ActivityMonitorExtension), embedded in the
+   main app com.qadamtechnologies.iqra. It runs the daily schedule that
+   re-applies the shield at midnight."
+3. `.ShieldConfiguration`: "This request is for Iqra's ShieldConfiguration
+   extension (com.qadamtechnologies.iqra.ShieldConfiguration), embedded in
+   the main app com.qadamtechnologies.iqra. It draws the custom shield
+   screen shown over blocked apps."
+4. `.ShieldAction`: "This request is for Iqra's ShieldAction extension
+   (com.qadamtechnologies.iqra.ShieldAction), embedded in the main app
+   com.qadamtechnologies.iqra. It handles taps on the shield's buttons."
+
+Shared description:
+
+> Iqra is a Quran study habit app for a small private study circle,
+> published by Qadam Technologies Inc. and distributed through TestFlight.
+> Each member logs the Quran they read or memorized each day.
+>
+> We are adding an opt-in self-control feature: a member chooses the apps
+> they find distracting, and those apps stay blocked on their own iPhone
+> until they have logged today's reading in Iqra.
+>
+> How Iqra uses the Screen Time frameworks:
+> - FamilyControls: when the member turns the feature on in Settings, Iqra
+>   calls AuthorizationCenter.requestAuthorization(for: .individual). It
+>   only manages the member's own device. Iqra is not a parental control
+>   app and does not monitor or restrict anyone else.
+> - FamilyActivityPicker: the member picks apps and categories. Iqra keeps
+>   only the opaque selection tokens, in a shared App Group so its
+>   extensions can read them. It never learns app names, never reads usage
+>   data, and the selection never leaves the device.
+> - ManagedSettings: Iqra shields the selected apps and removes the shield
+>   as soon as the member logs today's reading.
+> - DeviceActivity: a daily schedule starting at local midnight re-applies
+>   the shield each new day. No usage thresholds and no activity reports.
+> - Shield extensions: a ShieldConfiguration extension shows a custom
+>   shield ("Log today's Quran in Iqra to unlock"), and a ShieldAction
+>   extension handles its buttons (close, or a local notification that
+>   opens Iqra).
+>
+> The member can pause the block for the rest of the day or turn the
+> feature off at any time in Iqra's Settings, and revoking Screen Time
+> access in iOS Settings removes it completely. No Screen Time data is sent
+> to our servers or any third party.
 
 Timing: Apple says up to a week. 2026 forum reports: a few days to a
 month, sometimes silent. After two silent weeks, open a Developer
