@@ -52,3 +52,7 @@ supabase/.temp/
 
 # Firebase service account keys (secret, they live on EAS only)
 *firebase-adminsdk*.json
+
+# Extension targets copied from node_modules/react-native-device-activity by its
+# config plugin on every config evaluation (prebuild, expo config); never edited.
+/targets

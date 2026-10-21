@@ -5,11 +5,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/brand/icon-1024.png",
-    "scheme": "iqra",
+    "scheme": ["iqra", "device-activity"],
     "userInterfaceStyle": "automatic",
     "platforms": ["ios", "android"],
     "ios": {
       "bundleIdentifier": "com.qadamtechnologies.iqra",
+      "appleTeamId": "69BV989JDV",
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -53,6 +54,13 @@
           "color": "#157f43",
           "defaultChannel": "iqra",
           "enableRemoteNotifications": true
+        }
+      ],
+      [
+        "react-native-device-activity",
+        {
+          "appleTeamId": "69BV989JDV",
+          "appGroup": "group.com.qadamtechnologies.iqra"
         }
       ]
     ],
