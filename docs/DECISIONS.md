@@ -162,7 +162,11 @@ in `docs/SCREEN-TIME.md`, build notes in `docs/FOCUS.md` and SCREEN-TIME's
 - **Pause until tomorrow always exists,** unlimited, never counted or
   shamed: a stuck shield with no way out is how people uninstall apps.
   Turning Focus off clears everything at once (schedule, shield, chosen
-  apps). Deleting today's entry does not bring the block back.
+  apps).
+- **Focus follows Today's list, both ways** (owner, 2026-10-21, while
+  testing): an entry dated today unlocks once Today shows it, and a list
+  for today that is empty after a read has landed (the entry was deleted,
+  here or elsewhere) brings the block back at once.
 - **Opaque tokens only.** Iqra never learns app names; the card shows
   counts ("3 apps, 1 category").
 - **Shield copy:** title "Iqra", subtitle "Log today's Quran in Iqra to

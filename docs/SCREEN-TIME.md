@@ -193,8 +193,13 @@ bodies):
   schedule starts inside its interval, which would re-block a member who
   enabled Focus after logging. The schedule is only re-armed when iOS has
   dropped it.
-- **Today's loaded entries count too** (an entry dated today from the web
-  or another phone unlocks once Today sees it), not only enqueues.
+- **Today's list drives Focus both ways**: an entry dated today from the
+  web or another phone unlocks once Today sees it, and an empty list for
+  today after a landed read (the entry was deleted) brings the block
+  back. The plan's "no re-block on delete" went the other way when the
+  owner's first device test needed today's two entries out of the way
+  (they sat in `public.focus_test_backup`, RLS on, until the test was
+  done).
 - **Changing apps clears the block list first**: blocking only ever adds.
 - **Sign-out, account deletion or another account signing in turns Focus
   off** (review finding: a block only logging can lift must not outlive
