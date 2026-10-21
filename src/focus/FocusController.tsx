@@ -1,9 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { AppState } from "react-native";
 
 import { msUntilNextMidnight } from "@/lib/focus";
 
-import { reconcileFocus } from "./controls";
+import { disableFocus, reconcileFocus, type FocusContext } from "./controls";
 import { focusAvailable } from "./focus";
 import { useFocusContext } from "./useFocusContext";
 
@@ -17,7 +17,11 @@ import { useFocusContext } from "./useFocusContext";
  *    midnight and a Screen Time change made in iOS Settings (seen only
  *    after a restart, so the card says to reopen Iqra);
  *  - at the next profile-local midnight while the app stays open, the way
- *    Today's clock moves "today" on.
+ *    Today's clock moves "today" on;
+ *  - when the member goes away (sign out, account deletion, a dead
+ *    session): Focus is turned off, shield and schedule included. A block
+ *    that only logging can lift must not outlive the ability to log
+ *    (decision 5); the member picks their apps again after signing in.
  *
  * The unlock on a new entry is not here: Today and the notification
  * buttons call noteLogged where they enqueue (src/focus/controls.ts).
@@ -25,6 +29,12 @@ import { useFocusContext } from "./useFocusContext";
  */
 export function FocusController() {
   const ctx = useFocusContext();
+  const prev = useRef<FocusContext | null>(null);
+
+  useEffect(() => {
+    if (!ctx && prev.current && focusAvailable()) void disableFocus(prev.current);
+    prev.current = ctx;
+  }, [ctx]);
 
   useEffect(() => {
     if (!ctx || !focusAvailable()) return;

@@ -54,9 +54,12 @@ function applyState(state: FocusState, tz: string): void {
 /**
  * Make the phone match the stored state: on every foreground, after
  * midnight, and once a new member signs in. A state stamped with another
- * account is turned off first, shield and all, so nobody inherits a block.
- * Also re-registers the daily schedule if iOS has dropped it (a reinstall
- * or an update can), with its mid-day guard freshly computed.
+ * account is turned off first, shield and all, so nobody inherits a block;
+ * so is a schedule still running while the state says off (a pref write
+ * that failed mid-enable). Re-registers the daily schedule if iOS has
+ * dropped it (a reinstall or an update can), with its mid-day guard
+ * freshly computed, and rewrites the shield look every time so a mode
+ * change or an iOS update shows on the next shield.
  */
 export function reconcileFocus(ctx: FocusContext): Promise<void> {
   return serial(async () => {
@@ -69,10 +72,13 @@ export function reconcileFocus(ctx: FocusContext): Promise<void> {
         return;
       }
       const state = await readFocusState(ctx.userId);
-      if (!state.enabled) return;
+      if (!state.enabled) {
+        if (scheduleArmed()) clearEverything();
+        return;
+      }
       if (authStatus() !== "approved") return;
+      applyShieldLook(ctx.mode);
       if (!scheduleArmed()) {
-        applyShieldLook(ctx.mode);
         await armSchedule().catch((e) => console.warn("Focus schedule failed", e));
       }
       applyState(state, ctx.tz);
@@ -93,10 +99,16 @@ export function noteLogged(ctx: FocusContext, loggedAt: string): Promise<void> {
   return serial(async () => {
     if (!focusAvailable()) return;
     try {
+      // Another member's state is reconcile's to clear, never to overwrite
+      // (a notification button's log can run before the first reconcile).
+      const stored = await readStoredFocus();
+      if (stored && stored.userId !== ctx.userId) return;
       const state = await readFocusState(ctx.userId);
       const next = withLoggedDay(state, localDate(loggedAt, ctx.tz));
-      if (next === state) return;
-      await writeFocusState(ctx.userId, next);
+      if (next !== state) await writeFocusState(ctx.userId, next);
+      // Applied even when the day was already known: the monitor can
+      // re-block after an early log (iOS runs the midnight callback when
+      // the phone is next used), and a second log must still open the apps.
       applyState(next, ctx.tz);
     } catch (e) {
       console.warn("Focus unlock failed", e);

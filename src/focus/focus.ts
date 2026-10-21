@@ -32,11 +32,20 @@ export const SHIELD_ID = "iqra-focus-shield";
  *  Notes"), so this must contain SELECTION_ID. */
 export const ACTIVITY = "iqra-focus";
 
-/** Screen Time exists on this build: iOS 15+ with the native module. False
- *  on Android. True on the simulator, where authorization never completes
- *  and the picker is empty, so this feature is tested on a phone only. */
+/** iOS major version, 0 elsewhere. */
+function iosMajor(): number {
+  if (Platform.OS !== "ios") return 0;
+  return parseInt(String(Platform.Version), 10) || 0;
+}
+
+/** Focus exists on this build: the native module on iOS 18 or later. The
+ *  library says iOS 15, but the three extensions are built for iOS 18
+ *  (expo-apple-targets' default), and without them there is no shield
+ *  look, no buttons and no midnight re-block. False on Android. True on
+ *  the simulator, where authorization never completes and the picker is
+ *  empty, so this feature is tested on a phone only. */
 export function focusAvailable(): boolean {
-  return !!lib && lib.isAvailable();
+  return !!lib && lib.isAvailable() && iosMajor() >= 18;
 }
 
 export type FocusAuth = "approved" | "denied" | "notDetermined";
@@ -61,7 +70,11 @@ export function authStatus(): FocusAuth {
 export async function requestFocusAuth(): Promise<FocusAuth> {
   if (!lib) return "notDetermined";
   try {
+    // Resolves only once access is granted (iOS 16+ throws on a refusal
+    // or a dismissal), and the polled status can still say "denied" for
+    // a moment after a member who refused earlier now allows it.
     await lib.requestAuthorization("individual");
+    return "approved";
   } catch {
     // Refused or dismissed: the polled status says which.
   }
@@ -164,10 +177,15 @@ function shieldButtons(mode: Mode, canOpen: boolean): DeviceActivity.ShieldActio
 }
 
 /**
- * Store the shield under its id (what the midnight action applies by
- * `shieldId`) AND as the library's default (what a block made from the app
- * shows: `blockSelection` called from JS never copies the id-keyed look,
- * only the extension's action does, Shared.swift `updateShield`).
+ * Store the shield in the three places the extensions read it from
+ * (Shared.swift `getActivitySelectionPrefixedConfigFromUserDefaults`
+ * and `updateShield`): under its id, which the midnight action applies by
+ * `shieldId`; as the library's default, which a block made from the app
+ * shows (`blockSelection` called from JS never copies the id-keyed look);
+ * and under the selection, which the midnight action writes and the
+ * extensions prefer over the default from then on, so a newer look (a
+ * mode change, an iOS update past 26.5) would otherwise wait for the
+ * next midnight. Cheap, so it runs on every reconcile.
  */
 export function applyShieldLook(mode: Mode): void {
   if (!lib) return;
@@ -176,6 +194,8 @@ export function applyShieldLook(mode: Mode): void {
   const buttons = shieldButtons(mode, canOpen);
   lib.updateShieldWithId(look, buttons, SHIELD_ID);
   lib.updateShield(look, buttons, "iqra");
+  lib.userDefaultsSet(`shieldConfigurationForSelection_${SELECTION_ID}`, look);
+  lib.userDefaultsSet(`shieldActionsForSelection_${SELECTION_ID}`, buttons);
 }
 
 /** Device-local midnight after `now`, as the DeviceActivity schedule sees it. */
@@ -239,11 +259,6 @@ export function blockNow(): void {
 /** Drop the selection from the shield now. */
 export function unblockNow(): void {
   lib?.unblockSelection({ activitySelectionId: SELECTION_ID }, "iqra");
-}
-
-/** Anything shielded at all, from the ManagedSettings store itself. */
-export function shieldActive(): boolean {
-  return !!lib && lib.isShieldActive();
 }
 
 /** Forget the whole block list (the shield comes off). Used before a

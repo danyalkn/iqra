@@ -25,11 +25,14 @@ export const FOCUS_OFF: FocusState = { enabled: false, lastLoggedDay: null, paus
 
 export type FocusStatus = "off" | "blocked" | "unlocked" | "paused";
 
-/** What the member sees: logged today beats paused, paused beats blocked. */
+/** What the member sees: logged today beats paused, paused beats blocked.
+ *  A day at or after today counts, so a profile moved to a zone further
+ *  west (where "today" steps back a day) never blocks a day already
+ *  logged. */
 export function focusStatus(s: FocusState, today: string): FocusStatus {
   if (!s.enabled) return "off";
-  if (s.lastLoggedDay === today) return "unlocked";
-  if (s.pausedDay === today) return "paused";
+  if (s.lastLoggedDay && s.lastLoggedDay >= today) return "unlocked";
+  if (s.pausedDay && s.pausedDay >= today) return "paused";
   return "blocked";
 }
 
