@@ -1,0 +1,40 @@
+diff --git a/node_modules/react-native-device-activity/build/ReactNativeDeviceActivity.types.d.ts b/node_modules/react-native-device-activity/build/ReactNativeDeviceActivity.types.d.ts
+index 414d011..d6889ba 100644
+--- a/node_modules/react-native-device-activity/build/ReactNativeDeviceActivity.types.d.ts
++++ b/node_modules/react-native-device-activity/build/ReactNativeDeviceActivity.types.d.ts
+@@ -152,7 +152,7 @@ export type ShieldAction = {
+      * defaults to true
+      */
+     onlyFamilySelectionIdsContainingMonitoredActivityNames?: boolean;
+-    behavior: "close" | "defer";
++    behavior: "close" | "defer" | "openParentalControlsApp";
+     actions?: Action[];
+ };
+ export type ShieldActions = {
+diff --git a/node_modules/react-native-device-activity/src/ReactNativeDeviceActivity.types.ts b/node_modules/react-native-device-activity/src/ReactNativeDeviceActivity.types.ts
+index da7edd3..c2a903d 100644
+--- a/node_modules/react-native-device-activity/src/ReactNativeDeviceActivity.types.ts
++++ b/node_modules/react-native-device-activity/src/ReactNativeDeviceActivity.types.ts
+@@ -193,7 +193,7 @@ export type ShieldAction = {
+    * defaults to true
+    */
+   onlyFamilySelectionIdsContainingMonitoredActivityNames?: boolean;
+-  behavior: "close" | "defer";
++  behavior: "close" | "defer" | "openParentalControlsApp";
+   actions?: Action[];
+ };
+ 
+diff --git a/node_modules/react-native-device-activity/targets/ShieldAction/ShieldActionExtension.swift b/node_modules/react-native-device-activity/targets/ShieldAction/ShieldActionExtension.swift
+index da5121e..b29a5bd 100644
+--- a/node_modules/react-native-device-activity/targets/ShieldAction/ShieldActionExtension.swift
++++ b/node_modules/react-native-device-activity/targets/ShieldAction/ShieldActionExtension.swift
+@@ -159,6 +159,9 @@ func handleShieldAction(
+     if behavior == "defer" {
+       return .defer
+     }
++    if behavior == "openParentalControlsApp", #available(iOS 26.5, *) {
++      return .openParentalControlsApp
++    }
+   }
+ 
+   return .close

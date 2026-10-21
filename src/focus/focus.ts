@@ -99,15 +99,29 @@ export function selectionCounts(): SelectionCounts | null {
 const ACCENT = { red: 21, green: 127, blue: 67 };
 const WHITE = { red: 255, green: 255, blue: 255 };
 
+/**
+ * Whether a shield button can open Iqra. Apple never let a shield action
+ * open an app (the library's `openApp` does nothing on a device) until
+ * iOS 26.5 added the `openParentalControlsApp` response, which the
+ * extension returns for that behavior through
+ * patches/react-native-device-activity+0.6.1.patch (upstream PR #97).
+ */
+function shieldCanOpenApp(): boolean {
+  if (Platform.OS !== "ios") return false;
+  const [major = 0, minor = 0] = String(Platform.Version).split(".").map(Number);
+  return major > 26 || (major === 26 && minor >= 5);
+}
+
 /** What the blocked app shows (owner's wording, 2026-10-21). Title and
- *  subtitle keep the system label colour so they read in dark mode too. */
-function shieldLook(): DeviceActivity.ShieldConfiguration {
+ *  subtitle keep the system label colour so they read in dark mode too.
+ *  Before iOS 26.5 the button can only post a reminder, and says so. */
+function shieldLook(canOpen: boolean): DeviceActivity.ShieldConfiguration {
   return {
     title: "Iqra",
     subtitle: "Log today's Quran in Iqra to unlock this app.",
     iconSystemName: "book.closed.fill",
     iconTint: ACCENT,
-    primaryButtonLabel: "Open Iqra",
+    primaryButtonLabel: canOpen ? "Open Iqra" : "Remind me",
     primaryButtonBackgroundColor: ACCENT,
     primaryButtonLabelColor: WHITE,
     secondaryButtonLabel: "Not now",
@@ -116,22 +130,23 @@ function shieldLook(): DeviceActivity.ShieldConfiguration {
 }
 
 /**
- * The shield's buttons. "Open Iqra" tries to open the app (the library
- * opens `device-activity://`, a scheme app.json registers; Apple does not
- * promise a shield can open apps) and posts a local notification with the
- * member's log buttons, so the entry can be made from the banner without
- * opening Iqra at all (src/push/categories.ts, PushController writes it
- * headless and the unlock follows). `userInfo.url` is read by
- * src/push/actions.ts as the notification's `data.url`. Hifz members get
- * their own buttons. "Not now" just closes.
+ * The shield's buttons. On iOS 26.5+ "Open Iqra" brings Iqra to the front
+ * of the shielded app. Earlier, "Remind me" posts a local notification
+ * carrying the member's log buttons, so the entry can be made from the
+ * banner without opening Iqra at all (src/push/categories.ts;
+ * PushController writes it headless and the unlock follows).
+ * `userInfo.url` is read by src/push/actions.ts as the notification's
+ * `data.url`. Hifz members get their own buttons. "Not now" just closes.
  */
-function shieldButtons(mode: Mode): DeviceActivity.ShieldActions {
+function shieldButtons(mode: Mode, canOpen: boolean): DeviceActivity.ShieldActions {
+  if (canOpen) {
+    return { primary: { behavior: "openParentalControlsApp" }, secondary: { behavior: "close" } };
+  }
   const hifz = mode === "hifz";
   return {
     primary: {
       behavior: "close",
       actions: [
-        { type: "openApp" },
         {
           type: "sendNotification",
           payload: {
@@ -156,8 +171,9 @@ function shieldButtons(mode: Mode): DeviceActivity.ShieldActions {
  */
 export function applyShieldLook(mode: Mode): void {
   if (!lib) return;
-  const look = shieldLook();
-  const buttons = shieldButtons(mode);
+  const canOpen = shieldCanOpenApp();
+  const look = shieldLook(canOpen);
+  const buttons = shieldButtons(mode, canOpen);
   lib.updateShieldWithId(look, buttons, SHIELD_ID);
   lib.updateShield(look, buttons, "iqra");
 }
