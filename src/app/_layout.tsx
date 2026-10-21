@@ -14,6 +14,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 import { SyncController } from "@/data/SyncController";
+import { FocusController } from "@/focus/FocusController";
 import { SessionProvider, useSession } from "@/providers/SessionProvider";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { PushController } from "@/push/PushController";
@@ -52,6 +53,9 @@ export default function RootLayout() {
             {/* Offline outbox: sends queued entries when the app comes
                 back and on a backoff timer while any wait. */}
             <SyncController />
+            {/* Focus: keeps the Screen Time shield in step with "logged
+                today" on foreground and at midnight (iOS only). */}
+            <FocusController />
             <RootNavigator />
           </SessionProvider>
         </ThemeProvider>

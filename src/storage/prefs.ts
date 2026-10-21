@@ -19,6 +19,11 @@ export const PREF_KEYS = {
   /** Prefix of the per-user "hidden for today" revision rows (see
    *  revisionHiddenKey). */
   revisionHidden: "iqra:revision-hidden",
+  /** Focus (Screen Time blocking) state for this phone, JSON
+   *  `{ userId, enabled, lastLoggedDay, pausedDay }` (src/focus/state.ts).
+   *  Device-level like the push token, but stamped with the member it
+   *  belongs to so another account on the phone never inherits a block. */
+  focus: "iqra:focus",
 } as const;
 
 /** "1" once this user turned push on from this device (the web's
