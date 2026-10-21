@@ -258,5 +258,6 @@ Next, in order (FOCUS.md § 6 is the detail):
    phone used after midnight.
 4. `npx eas-cli@latest build --profile production --platform ios --non-interactive`,
    then `npx eas-cli@latest submit --platform ios --latest`; from then on
-   iOS JS updates target runtime 1.1.0.
+   iOS JS updates target runtime 1.2.0 (the chat pictures bumped it the
+   same evening).
 
