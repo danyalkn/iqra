@@ -18,6 +18,7 @@ import {
   disableFocus,
   enableFocus,
   pauseFocus,
+  reconcileFocus,
   resumeFocus,
 } from "@/focus/controls";
 import {
@@ -116,14 +117,25 @@ export function FocusCard() {
   };
 
   // Access first, then the picker. The system sheet can be shown again
-  // after a refusal, so the denied state's button comes back here too.
+  // after a refusal, so the "Allow access" button comes here too; with
+  // Focus already on (access revoked in Settings, then granted again) the
+  // schedule and the block are simply put back.
   const turnOn = async () => {
     setBusyBoth(true);
     setError(null);
     const status = await requestFocusAuth();
     setAuth(status);
+    if (status !== "approved") {
+      setBusyBoth(false);
+      return;
+    }
+    if (state.enabled) {
+      await reconcileFocus(ctx);
+      setBusyBoth(false);
+      refresh();
+      return;
+    }
     setBusyBoth(false);
-    if (status !== "approved") return;
     picked.current = null;
     setPicker({ purpose: "enable", initial: null });
   };
@@ -180,12 +192,14 @@ export function FocusCard() {
 
   const status = focusStatus(state, today);
   const on = state.enabled;
-  const denied = !on && auth === "denied";
+  // Refused when asked, or revoked in iOS Settings while Focus was on (iOS
+  // lifts the block itself then; the status is seen after a restart).
+  const needsAccess = auth !== "approved" && (on || auth === "denied");
   const summary = counts ? selectionSummary(counts) : "";
 
   let note: string;
   if (!loaded) note = "Checking…";
-  else if (denied) {
+  else if (needsAccess) {
     note =
       "Iqra needs Screen Time access to block apps. Allow it when asked, or under Settings > Screen Time, then reopen Iqra.";
   } else if (status === "off") {
@@ -216,7 +230,7 @@ export function FocusCard() {
             <ActivityIndicator color={c.accent} />
           ) : (
             loaded &&
-            !denied && (
+            (on || !needsAccess) && (
               <Switch
                 value={on}
                 onValueChange={(next) => void (next ? turnOn() : turnOff())}
@@ -225,7 +239,7 @@ export function FocusCard() {
             )
           )}
         </View>
-        {denied && !busy && (
+        {loaded && needsAccess && !busy && (
           <View style={styles.actions}>
             <Button variant="secondary" size="md" onPress={() => void turnOn()}>
               Allow access
@@ -239,7 +253,7 @@ export function FocusCard() {
             </Pressable>
           </View>
         )}
-        {on && !busy && (
+        {on && !needsAccess && !busy && (
           <View style={styles.actions}>
             <Button variant="secondary" size="md" onPress={changeApps}>
               Change apps
