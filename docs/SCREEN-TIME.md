@@ -271,8 +271,15 @@ Next, in order (FOCUS.md § 6 is the detail):
 3. The device checklist in FOCUS.md § 6.4, one step at a time. The
    "Open Iqra" button needs iOS 26.5+; the overnight re-block needs the
    phone used after midnight.
-4. `npx eas-cli@latest build --profile production --platform ios --non-interactive`,
-   then `npx eas-cli@latest submit --platform ios --latest`; from then on
-   iOS JS updates target runtime 1.2.0 (the chat pictures bumped it the
-   same evening).
+4. ~~The production build and submit~~ Done 2026-10-21: the owner ran
+   the production build interactively (EAS made the extensions' App
+   Store profiles; "Synced capabilities: No updates" on all four App IDs,
+   so the portal was right), build 8e9e9d24 = iOS 1.2.0 (8), submitted
+   with `eas submit --latest` (submission aa450a1c) at 19:10 EDT. Owner
+   steps in App Store Connect: add build 8 to the external group
+   "Circle" and give the new version its What to Test ("Focus: block the
+   apps you choose until you log today's Quran, your phone only.
+   Pictures in the chat."); Beta App Review follows. From then on iOS JS
+   updates target runtime 1.2.0. `public.focus_test_backup` was dropped
+   after the two entries were verified back in place.
 
