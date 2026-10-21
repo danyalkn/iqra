@@ -479,6 +479,41 @@ printed 0 (`NativeTabs` 3). The iOS-side changes are the inert re-tap ref
 and the shared clearance hook; Today, the tab bar and the log sheet ran
 normally on the iOS simulator at that commit. No Android update was sent.
 
+## Build 6 verified (2026-10-21, 1.2.0, the APK for the member)
+
+Build 4 is superseded (1.1.0 runtime, no picture modules): the member
+gets **build df7fe5f5, versionCode 6, version 1.2.0** (preview profile,
+arm64, the same keystore, so it installs over his APK). Its page:
+https://expo.dev/accounts/danyal0726/projects/iqra/builds/df7fe5f5-a37d-49ad-932d-a43c7c97fc13
+It carries everything iOS 1.2.0 has except Focus, whose Settings card
+says "Coming soon to Android" with no switch (owner's choice over
+hiding it). The first attempt (08ca7d61) died in Gradle's Kotlin compile
+("daemon disappeared", memory); `plugins/withGradleMemory.js` now writes
+a 4 GB heap and 1.5 GB Metaspace into gradle.properties (d81f4b4).
+
+Emulator run (Sonnet agent, AVD `iqra-play`, throwaway account in the
+Demo Circle, deleted after with zero rows left; screenshots were in the
+session's scratchpad): install over build 4, sign-up without email
+confirmation, onboarding, 1 page logged and on the server; a picture
+with a caption sent from Android's photo picker (41 KB for the flat app
+icon, 73 KB for a 6016 px wallpaper, both 1600 px after the resize,
+object and row correct), full screen on tap, Reply and Copy on the
+captioned picture, no Copy on a caption-less one, the reply bar reading
+"Photo", both pictures back after a force-stop, the Settings card as
+designed, zero FATAL or missing-module lines in logcat. Chat pictures
+were tested against the Demo Circle only; nothing reached the real one.
+
+Seen, not fixed (small): in the Log Reading sheet the numeric keyboard
+covers "Save entry" until the keyboard's check key hides it; the
+long-press menu on an own message near the bottom opens over the
+picture instead of beside it. Library warnings (`ExpoModulesV2`
+Enumerable, `OnBackInvokedCallback`) are harmless; predictive back is
+off on purpose.
+
+Still with the owner (unchanged from "Moving the Android member over"):
+send him the build 6 page instead of build 4's, his email, the OK for a
+test push, and the web push row cleanup.
+
 ## Kickoff brief for the next session (paste as the first message)
 
 ```
