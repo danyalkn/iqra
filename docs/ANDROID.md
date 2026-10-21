@@ -466,6 +466,18 @@ the same as the patched local build the checklist ran on.
 6. Then update HANDOFF Phase 5 (the member has moved) and NEXT-SESSION
    owner check 5. From then on Android JS updates go to runtime 1.1.0:
    `npx eas-cli@latest update --channel preview --environment preview --platform android --message "..." --non-interactive`.
+   Send one right after he installs: build 4 (14d5cf0) predates the
+   reading bookmark copy fix (41b3c69).
+
+## iOS received this JS (2026-10-20)
+
+The iOS production update for the bookmark copy fix (group 16109ae5,
+runtime 1.0.0, from 41b3c69) was the first iOS update since 3a70e96, so
+it carried every commit in this file to the TestFlight build too. Checked
+first, per the expo-blur rule: `grep -c -a ExpoBlur` on the iOS export
+printed 0 (`NativeTabs` 3). The iOS-side changes are the inert re-tap ref
+and the shared clearance hook; Today, the tab bar and the log sheet ran
+normally on the iOS simulator at that commit. No Android update was sent.
 
 ## Kickoff brief for the next session (paste as the first message)
 
