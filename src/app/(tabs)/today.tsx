@@ -46,6 +46,7 @@ import {
   fetchMyRecentEntries,
   type HifzHistoryRow,
 } from "@/data/entryReads";
+import { noteLogged } from "@/focus/controls";
 import { useMembership } from "@/hooks/use-membership";
 import { useOutbox } from "@/hooks/use-outbox";
 import { useNow } from "@/hooks/use-now";
@@ -588,6 +589,14 @@ export default function TodayScreen() {
     () => entries.filter((e) => localDate(e.logged_at, tz) === today),
     [entries, tz, today],
   );
+
+  // Focus: an entry dated today from anywhere (the web, another phone, a
+  // notification button) unlocks this phone's blocked apps once it shows
+  // here (src/focus/controls.ts). A no-op when the day is already known.
+  useEffect(() => {
+    if (!userId || todayEntries.length === 0) return;
+    void noteLogged({ userId, tz, mode }, todayEntries[0].logged_at);
+  }, [userId, tz, mode, todayEntries]);
   const filtered = todayEntries.filter((e) =>
     filter === "all" ? true : bucketOf(e.entry_type) === filter,
   );
@@ -805,6 +814,9 @@ export default function TodayScreen() {
       state: "pending",
     };
     await enqueue(item);
+    // Focus: a queued entry dated today lets the blocked apps go at once,
+    // online or not (docs/FOCUS.md decision 3). Yesterday's changes nothing.
+    void noteLogged({ userId, tz, mode }, item.entry.logged_at);
     await syncOutbox(userId);
     // Refused outright: it moves to the "Couldn't sync" card.
     const left = outboxSnapshot(userId).items.find((i) => i.id === item.id);

@@ -3,6 +3,7 @@ import { DEFAULT_ACTION_IDENTIFIER } from "expo-notifications";
 import { AppState, Platform } from "react-native";
 
 import { markEntriesChanged } from "@/data/entryWrites";
+import { noteLogged } from "@/focus/controls";
 import { logContext } from "@/data/logContext";
 import { setAfterHifzSync, syncOutbox } from "@/data/sync";
 import { TIMED_OUT, withTimeout } from "@/data/timeout";
@@ -260,6 +261,10 @@ async function performLogClaimed(
     queued = true;
     // Today and the revision nudges count it from here on, sent or not.
     markEntriesChanged();
+    const tz = profile.timezone || "UTC";
+    // Focus: today's entry lets the blocked apps go before anything slow
+    // (a background launch has seconds). Never throws.
+    await noteLogged({ userId, tz, mode: profile.mode }, entry.logged_at);
 
     const run = syncOutbox(userId);
     if ((await withTimeout(run, SEND_WAIT_MS)) === TIMED_OUT && isSending(userId, item.id)) {
@@ -271,7 +276,6 @@ async function performLogClaimed(
     // report a send that has since landed as waiting).
     if (AppState.currentState === "active") return "logged";
 
-    const tz = profile.timezone || "UTC";
     const days = new Set(recent.map((e) => localDate(e.logged_at, tz)));
     days.add(localDate(tappedAt, tz));
     const streak = currentStreak(days, tz, Date.now());
