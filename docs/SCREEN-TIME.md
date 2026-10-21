@@ -159,3 +159,68 @@ stats, add a `focus_days` table then, not now, and keep it private to the
 member: Apple's terms bar sharing device or usage data from the framework
 "beyond ... the individual and their device", so showing the circle who
 had blocking on, or who paused, is out.
+
+## Progress 2026-10-21 (built; dev build and device checklist next)
+
+Focus is code complete on `main` (7365e6c..dff5882, one concern per
+commit; `docs/FOCUS.md` was the plan, `docs/DECISIONS.md` "Focus" has the
+owner's answers). Typecheck, lint and expo-doctor clean; local
+`expo prebuild --platform ios --clean` gives the app and the three
+extensions the Family Controls entitlement and the App Group, `pod
+install` passes, the three extension targets compile against the local
+iOS 26.5 SDK, and the Android bundle exports (the library is loaded on
+iOS only). An independent review ran before the device checklist.
+Nothing is on a phone yet: the simulator cannot run Screen Time.
+
+What departs from the FOCUS.md plan, and why (details in the commit
+bodies):
+
+- **The shield's primary button.** Apple never let a shield open an app;
+  the library's `openApp` does nothing on a device (maintainer, issue 81).
+  iOS 26.5 added `ShieldActionResponse.openParentalControlsApp`, which the
+  library does not expose yet (upstream PR 97). `patches/
+  react-native-device-activity+0.6.1.patch` (patch-package, postinstall)
+  adds it to the ShieldAction extension in three lines; iOS 26.5+ gets
+  "Open Iqra" with that behavior, older iOS gets "Remind me", a local
+  notification with the member's log buttons. The plugin copies the
+  extension from node_modules on every prebuild, so the patch is the one
+  place that reaches every build.
+- **The shield look is written twice** (`updateShieldWithId` for the
+  midnight action, `updateShield` for blocks made from the app): a block
+  from JS never copies the id-keyed look (Shared.swift `updateShield`).
+- **The midnight action carries `neverTriggerBefore`** = the coming
+  device midnight: Apple calls `intervalDidStart` immediately when a
+  schedule starts inside its interval, which would re-block a member who
+  enabled Focus after logging. The schedule is only re-armed when iOS has
+  dropped it.
+- **Today's loaded entries count too** (an entry dated today from the web
+  or another phone unlocks once Today sees it), not only enqueues.
+- **Changing apps clears the block list first**: blocking only ever adds.
+- **Another account signing in turns Focus off**; sign-out leaves it.
+- **Access revoked while on**: iOS lifts the block itself; the card shows
+  the access note with "Allow access" after a restart.
+- `ios.appleTeamId` is set (expo-apple-targets reads it; the plugin's own
+  prop is not forwarded). The `device-activity` scheme stays registered
+  (harmless; it is what the library's `openApp` would open).
+- The extension targets default to iOS 18.0 (expo-apple-targets); fine
+  for this circle, note it if a member is on iOS 17.
+- At 00:00 iOS runs the monitor only once the phone is in use (Apple
+  docs), so an idle phone is re-blocked when next picked up.
+
+Next, in order (FOCUS.md § 6 is the detail):
+
+1. Owner: `npx eas-cli@latest build --profile development --platform ios`
+   interactively (EAS needs the Apple login once to create provisioning
+   profiles for the three extension ids; non-interactive failed on
+   exactly that). Installing it replaces the TestFlight app (data kept).
+   The owner then runs Metro (`npx expo start --port 8082`).
+2. Check the portal after the build: Family Controls (Distribution) on all
+   four App IDs (the owner ticked them 2026-10-21; EAS's capability sync
+   has failed silently for others, eas-cli issue 2715).
+3. The device checklist in FOCUS.md § 6.4, one step at a time. The
+   "Open Iqra" button needs iOS 26.5+; the overnight re-block needs the
+   phone used after midnight.
+4. `npx eas-cli@latest build --profile production --platform ios --non-interactive`,
+   then `npx eas-cli@latest submit --platform ios --latest`; from then on
+   iOS JS updates target runtime 1.1.0.
+

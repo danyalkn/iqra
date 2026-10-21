@@ -1,5 +1,10 @@
 # Focus (Screen Time) - build session handoff
 
+**Built 2026-10-21.** This file is the plan it was built from; what was
+built, where it departs from the plan and why, and the remaining steps
+are in `docs/SCREEN-TIME.md` "Progress 2026-10-21". The owner's answers
+to the questions below are in `docs/DECISIONS.md` "Focus".
+
 Written 2026-10-21, the day Apple approved the Family Controls
 (Distribution) entitlement, for a fresh session that builds the feature.
 Read `CLAUDE.md`, then this file, then `docs/SCREEN-TIME.md` (design and

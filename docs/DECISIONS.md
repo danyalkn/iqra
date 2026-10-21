@@ -134,6 +134,48 @@ exists but stays unscheduled (superseded by the lapse nudge).
   stays; the recap push, recap card and all "mine" insights are personal-only.
 - Chat can be muted per user (`profiles.notify_chat`); `@all` overrides mute.
 
+## Focus (owner, 2026-10-21)
+
+Screen Time app blocking, called **Focus** in the app; Apple's names
+(Screen Time, Family Controls, ManagedSettings, DeviceActivity) never
+appear in copy except to tell a member where to go in iOS Settings. Design
+in `docs/SCREEN-TIME.md`, build notes in `docs/FOCUS.md` and SCREEN-TIME's
+"Progress". iOS only; the Android card says "Coming soon to Android"
+(owner's choice over hiding it).
+
+- **Opt-in, per phone, self-control only.** Authorization is `individual`,
+  never `child`. Iqra never blocks, monitors or reports on anyone else's
+  phone. **Nothing about Focus is sent to the server or shown to the
+  circle** (Apple's terms bar sharing framework data beyond the member and
+  their device): no feed items, chat lines or stats about blocking.
+- **"Logged today" is the streak's rule:** an entry dated today in the
+  profile's time zone, of any type (hifz entries unlock too). A backdated
+  "yesterday" entry (possible until 3 AM) does not unlock today. The phone
+  counts what it knows about: an entry queued here (it unlocks the moment
+  it is queued, online or not), one written by a notification button, or
+  one loaded on Today (so a log made on the web counts once Today has
+  seen it).
+- **Midnight is device-local for the re-block** (the schedule only knows
+  device time, and iOS runs it when the phone is next used) **and
+  profile-local for the unlock.** They differ only when the phone's zone
+  and the profile zone disagree; accepted for a five-person circle.
+- **Pause until tomorrow always exists,** unlimited, never counted or
+  shamed: a stuck shield with no way out is how people uninstall apps.
+  Turning Focus off clears everything at once (schedule, shield, chosen
+  apps). Deleting today's entry does not bring the block back.
+- **Opaque tokens only.** Iqra never learns app names; the card shows
+  counts ("3 apps, 1 category").
+- **Shield copy:** title "Iqra", subtitle "Log today's Quran in Iqra to
+  unlock this app.", secondary "Not now". The primary button is "Open
+  Iqra" on iOS 26.5 and later, where Apple lets a shield open the app that
+  applied it; on earlier iOS it is "Remind me" and posts a local
+  notification with the member's log buttons, since no shield button could
+  open an app before 26.5. Paper & Pine accent, no em dashes.
+- **Another account signing in on the phone turns Focus off** (shield and
+  all); signing out leaves it as it is for the member who comes back.
+  Revoking Screen Time access in iOS Settings lifts the block by itself;
+  the card shows the access note after Iqra is reopened.
+
 ## Chat
 
 - Reactions (Instagram quick set, in that order), replies, @mentions with

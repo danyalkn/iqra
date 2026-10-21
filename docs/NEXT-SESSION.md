@@ -279,8 +279,9 @@ Decisions taken while building, refining the plan above:
 2. **Revision nudge**: confirm the 8 PM "Revision suggestion" fires only
    when something due is still unrevised, and not after logging it.
 3. ~~Family Controls (Distribution) requests~~ Filed and approved
-   2026-10-21 (one account-wide request, not four). The build session
-   starts from `docs/FOCUS.md`.
+   2026-10-21 (one account-wide request, not four). Focus built the same
+   day (`docs/SCREEN-TIME.md` "Progress"); the dev build and the phone
+   checklist are what is left.
 4. **TestFlight public link** for the circle; Test Information > Privacy
    Policy URL (optional but cheap).
 5. **Android 1.1.0**: done 2026-10-20 (Firebase, FCM V1 key on EAS, the
