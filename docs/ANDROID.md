@@ -290,6 +290,69 @@ iOS bundle has no ExpoBlur. Then the member's phone after he installs.
    `docs/NEXT-SESSION.md` owner check 5. Commit per concern: deps,
    config, tab bar, clearance helper, docs.
 
+## Progress 2026-10-20 (session 1: the tab bar landed, push waits on Firebase)
+
+Job 2 is done in `main` and emulator-verified; job 1 waits on the owner's
+Firebase steps (none done yet). Nothing has shipped: the 1.1.0 APK is not
+built, and Android JS updates must not be sent (the only Android install
+is the member's 1.0.0 APK, which stays on runtime 1.0.0).
+
+Commits, one concern each: expo-blur dep (8e93e7e), `android.version`
+1.1.0 (9a9e248; resolver confirms Android 1.1.0, iOS 1.0.0), preview
+`autoIncrement` (e0a3ee6; remote versionCode was 1), the bar component
+(38c91c0), the clearance hook (258100d), the route switch (823524d),
+re-tap scroll to top (52ef916), DECISIONS (a99e3f9), docs (9918503),
+eager mounting, glyphs and the chat keyboard fix (the three after).
+
+What changed against section 2 above, and why:
+
+- **Bundling fact corrected** (see the expo-blur bullet): route
+  `.android.tsx` files are bundled on iOS; the blur-free
+  `AndroidTabs.tsx` fallback is load-bearing.
+- **Icons: Lucide**, `ChartNoAxesColumn` for Insights, faint accent fill
+  in the selected glyph except Users (open paths fill into wedges).
+- **Blur only on Android 12+ (`LIVE_BLUR`)**, gated in JS: expo-blur's own
+  SDK fallback is defeated by prop order (review). Wash alphas are 0.34
+  light / 0.27 dark because expo-blur's tint is a colour layer of its own
+  (review); the emulator measured about 30 percent (light) and 35 percent
+  (dark) of the content showing through, on target.
+- **Every tab mounts at launch** (`renderEveryTab`), as NativeTabs did;
+  the lazy slot left the old screen on show for 2 to 3 s on a first visit.
+- **Re-tap scrolls to the top** on Today, Feed, Insights, Profile
+  (`useReselectScrollToTop`; iOS gets an inert ref). Chat excluded.
+- **Chat keyboard on Android**: keyboard-controller's KeyboardAvoidingView
+  put the field under the keyboard in two runs (its measured frame came
+  out 112 dp short; the probe showed every input right and the result
+  wrong; not reproducible on demand). Android now pads from the keyboard
+  height alone (`KeyboardSpace` in chat.tsx); iOS path unchanged. The old
+  Android config (offset 0, padding 8) was never emulator-verified either.
+- `expo-doctor`: five patch-level updates listed (expo, expo-router,
+  expo-font, expo-image, @expo/ui). Left alone so the JS iOS receives
+  stays what was reviewed; bump them in a separate commit if wanted.
+
+Emulator run (Sonnet agent, AVD `iqra-play`, API 35 Play image, debug
+build + Metro, throwaway in the Demo Circle, deleted after): bar look,
+TalkBack attributes (role tab, selected, labels, 76x51 dp items),
+clearance on every screen including the FAB fan-out, keyboard hide, back
+button (Feed to Today, Today exits), the three push deep links, dark mode,
+sign-out, re-tap scroll: pass. gfxinfo was 97 to 99 percent janky on
+every screen including Journal with no bar, so the emulator's software
+renderer, not the bar; judge frame rate on the member's phone. Screenshots
+in the session scratchpad only.
+
+Emulator notes for next time: the owner's `p9pro` AVD was 99 percent
+full; Iqra has its own `iqra-play` (8 GB data). A headless emulator from
+another project (`emulator-5562`) is often attached: always pass the
+serial. The emulator crashed twice under host load (the review workflow,
+an export and gradle were running at once); run it alone. `supabase db
+query` prints only the last statement's rows.
+
+Remaining, in order: owner Firebase steps 1 to 5 (section 1), then the
+agent steps there (file, app.json `googleServicesFile`, `.gitignore`
+`*firebase-adminsdk*.json`, expo-doctor), the build, the push checklist
+on `iqra-play` with the release APK (that is also the first release-build
+look at the bar), the member's move, docs.
+
 ## Kickoff brief for the next session (paste as the first message)
 
 ```
