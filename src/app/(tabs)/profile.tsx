@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NavRow } from "@/components/profile/NavRow";
 import { CelebrateToggle } from "@/components/settings/CelebrateToggle";
 import { DeleteAccount } from "@/components/settings/DeleteAccount";
+import { FocusCard } from "@/components/settings/FocusCard";
 import { MushafSelect } from "@/components/settings/MushafSelect";
 import { NotificationsToggle } from "@/components/settings/NotificationsToggle";
 import { ProfileSection } from "@/components/settings/ProfileSection";
@@ -211,6 +212,10 @@ export default function ProfileScreen() {
             <View onLayout={onNotificationsLayout}>
               <NotificationsToggle />
             </View>
+
+            {/* Focus: block the apps you choose until today's Quran is
+                logged (docs/FOCUS.md). iOS only for now. */}
+            <FocusCard />
 
             <CelebrateToggle />
 
