@@ -16,11 +16,20 @@ import { CATEGORY } from "@/push/categories";
  * and its module scope wraps that stub in an event emitter, so it is loaded
  * on iOS alone and every function here is a no-op elsewhere.
  */
-const lib: typeof DeviceActivity | null =
-  Platform.OS === "ios"
-    ? // eslint-disable-next-line @typescript-eslint/no-require-imports -- a static import would run the package's Android stub at launch
-      (require("react-native-device-activity") as typeof DeviceActivity)
-    : null;
+function loadLib(): typeof DeviceActivity | null {
+  if (Platform.OS !== "ios") return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- a static import would run the package's Android stub at launch
+    return require("react-native-device-activity") as typeof DeviceActivity;
+  } catch (e) {
+    // A build without the native module (the TestFlight 1.0.0 build given
+    // this JS by an update): Focus simply does not exist there.
+    console.warn("Focus unavailable on this build", e);
+    return null;
+  }
+}
+
+const lib = loadLib();
 
 /** The member's picked apps, kept in the App Group by the library under
  *  this id so the extensions can read them. */
