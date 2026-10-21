@@ -12,14 +12,25 @@ Two tiers of the `com.apple.developer.family-controls` entitlement:
   immediately on a physical device with a development profile. Use this to
   build and test everything.
 - **Distribution**: required for TestFlight and App Store builds. Must be
-  requested from Apple and approved per bundle id.
+  requested from Apple.
 
 Request form: https://developer.apple.com/contact/request/family-controls-distribution
-(sign-in required, so the exact fields cannot be checked from here).
+
+**Filed 2026-10-21, Request ID GS68KZ6855.** The form is no longer per
+bundle id (forum posts and older guides describe one request per id). It is
+one account-wide request: the page shows the name, email and Team ID
+(Qadam Technologies Inc., `69BV989JDV`), the terms, and a "Get the Family
+Controls Framework Entitlement" button, with no bundle id or description
+fields. "Once assigned to your developer account, you can build apps that
+use the capabilities of the Family Controls Framework." Do not file again.
+Iqra fits the permitted purpose "offering individuals the ability to manage
+their devices to enable focus and productivity".
+
 Notes:
 
-- Submit as the org's **Account Holder**. Admins get rejected or ignored.
-- One request per bundle id. Four total:
+- Submitted as the org's **Account Holder**.
+- Four bundle ids need the capability (all four App IDs registered
+  2026-10-21):
   - `com.qadamtechnologies.iqra` (the app)
   - `com.qadamtechnologies.iqra.ActivityMonitorExtension`
   - `com.qadamtechnologies.iqra.ShieldConfiguration`
@@ -35,33 +46,14 @@ Notes:
   `bundleIdentifier`, and none of the three do.
 - All four must share one App Group (`group.com.qadamtechnologies.iqra`), or provisioning
   fails silently for the missing target.
-- After approval: Identifiers -> each App ID -> Additional Capabilities ->
-  enable Family Controls (Distribution). Then let EAS regenerate profiles
-  (`eas credentials` or just rebuild).
+- After approval: Identifiers -> each of the four App IDs -> Additional
+  Capabilities -> enable Family Controls (Distribution). Not yet confirmed
+  whether the account-wide grant still needs this per id; check all four.
+  Then let EAS regenerate profiles (`eas credentials` or just rebuild).
+- Team ID for the config plugin's `appleTeamId`: `69BV989JDV`.
 
-Form text (final, 2026-10-21). Each request starts with its own opening
-line, then the shared description below it.
-
-Opening lines:
-
-1. `com.qadamtechnologies.iqra`: "This request is for the main Iqra app
-   (com.qadamtechnologies.iqra). Separate requests cover its three Screen
-   Time extensions: .ActivityMonitorExtension, .ShieldConfiguration and
-   .ShieldAction."
-2. `.ActivityMonitorExtension`: "This request is for Iqra's
-   DeviceActivityMonitor extension
-   (com.qadamtechnologies.iqra.ActivityMonitorExtension), embedded in the
-   main app com.qadamtechnologies.iqra. It runs the daily schedule that
-   re-applies the shield at midnight."
-3. `.ShieldConfiguration`: "This request is for Iqra's ShieldConfiguration
-   extension (com.qadamtechnologies.iqra.ShieldConfiguration), embedded in
-   the main app com.qadamtechnologies.iqra. It draws the custom shield
-   screen shown over blocked apps."
-4. `.ShieldAction`: "This request is for Iqra's ShieldAction extension
-   (com.qadamtechnologies.iqra.ShieldAction), embedded in the main app
-   com.qadamtechnologies.iqra. It handles taps on the shield's buttons."
-
-Shared description:
+Description of the feature, unused by the form (it had no text fields).
+Keep it for any follow-up question from Apple:
 
 > Iqra is a Quran study habit app for a small private study circle,
 > published by Qadam Technologies Inc. and distributed through TestFlight.
@@ -95,8 +87,8 @@ Shared description:
 > to our servers or any third party.
 
 Timing: Apple says up to a week. 2026 forum reports: a few days to a
-month, sometimes silent. After two silent weeks, open a Developer
-Technical Support ticket referencing the request.
+month, sometimes silent. After two silent weeks (2026-11-04), open a
+Developer Technical Support ticket with the Request ID and Team ID.
 
 Ship TestFlight build 1 WITHOUT the capability. Add it in a later build.
 
@@ -160,4 +152,7 @@ Sideloaded APK, so no Google Play policy review for these permissions.
 
 No server state needed. Per-device: enabled flag, app selection (library
 storage), last pause date. If the owner later wants "focus streaks" in
-stats, add a `focus_days` table then, not now.
+stats, add a `focus_days` table then, not now, and keep it private to the
+member: Apple's terms bar sharing device or usage data from the framework
+"beyond ... the individual and their device", so showing the circle who
+had blocking on, or who paused, is out.

@@ -58,9 +58,10 @@ Three pieces of work, in this order:
 2. App Store Connect app record: `eas submit` offers to create it; or make
    it by hand (name Iqra, bundle id `com.qadamtechnologies.iqra`, SKU
    `iqra-ios`, English).
-3. **File the four Family Controls (Distribution) requests** as the
-   Account Holder (`docs/SCREEN-TIME.md` has the form text). Days to weeks;
-   this is the long pole of Phase 4 and nothing else can shorten it.
+3. ~~File the Family Controls (Distribution) request~~ Filed 2026-10-21
+   (Request ID GS68KZ6855, one account-wide request; `docs/SCREEN-TIME.md`).
+   Days to weeks; this is the long pole of Phase 4 and nothing else can
+   shorten it.
 4. Android push: Firebase project, `google-services.json`, FCM V1 key via
    `eas credentials` (PHASE3.md owner task 6). Not needed for TestFlight.
 5. First Android build interactively so EAS creates the keystore.
@@ -210,7 +211,7 @@ extension targets (`ActivityMonitorExtension`, `ShieldConfiguration`,
 
 Sequence:
 
-1. Owner files the four Distribution requests now (owner task 3). Until
+1. Owner filed the Distribution request 2026-10-21 (owner task 3). Until
    approval, build with the **Development** entitlement on the dev client
    and test on the phone; TestFlight builds must not include the capability
    or signing fails.
