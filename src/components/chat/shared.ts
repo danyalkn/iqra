@@ -80,6 +80,13 @@ export function mentionedUserIds(body: string, members: GroupMember[], userId: s
     .map((m) => m.user_id);
 }
 
+/** What a message reads as in a quote or the reply bar: its text, or
+ *  "Photo" for a picture sent without a caption. */
+export function messagePreview(msg: Pick<Message, "body" | "image_path"> & { local_image?: string }): string {
+  if (msg.body) return msg.body;
+  return msg.image_path || msg.local_image ? "Photo" : "";
+}
+
 /** "You replied to Yusuf" caption for a reply message. */
 export function replyCaption(
   msg: Message,

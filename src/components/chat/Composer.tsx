@@ -1,17 +1,34 @@
-import { ChevronDown, Send, X } from "lucide-react-native";
+import { Image } from "expo-image";
+import { ChevronDown, ImagePlus, Send, X } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
-import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
 import { Elevation, Radius, Type } from "@/constants/theme";
+import { pickChatImage, type PickedImage } from "@/data/chatImages";
 import { useTheme } from "@/hooks/use-theme";
 import type { GroupMember } from "@/lib/types";
 
 import type { ComposerProps } from "./contracts";
 import { MentionSuggestions } from "./MentionSuggestions";
-import { ALL_TOKEN, firstName, isTemp, mentionedUserIds, type MentionQuery } from "./shared";
+import {
+  ALL_TOKEN,
+  firstName,
+  isTemp,
+  mentionedUserIds,
+  messagePreview,
+  type MentionQuery,
+} from "./shared";
 
 /** The web's useSwipeDownDismiss threshold: a 40px downward drag blurs the
  *  field. On native the same drag dismisses the keyboard. */
@@ -50,6 +67,11 @@ function dismissKeyboard() {
  * swipe-down was stuck in the chat (owner, 2026-10-18). While the field has
  * focus a "Hide keyboard" chevron sits left of it, so the way back to the
  * tabs is on screen; the swipe-down still works for those who know it.
+ *
+ * Pictures (owner, 2026-10-21): the photo button left of the field opens the
+ * system library; the chosen picture is resized and re-encoded at once
+ * (src/data/chatImages.ts) and waits as a thumbnail above the field, with
+ * or without a caption, until Send. One picture per message.
  */
 export function Composer({
   groupName,
@@ -65,6 +87,10 @@ export function Composer({
   const inputRef = useRef<ComponentRef<typeof TextInput>>(null);
   const [draft, setDraft] = useState("");
   const [mentionQuery, setMentionQuery] = useState<MentionQuery | null>(null);
+  // The picture waiting to be sent, already made small; `picking` while the
+  // library is open or the copy is being made.
+  const [image, setImage] = useState<PickedImage | null>(null);
+  const [picking, setPicking] = useState(false);
   // Field focused = keyboard up (the interactive swipe-down blurs it too).
   const [focused, setFocused] = useState(false);
   // Controlled only for the render after a mention pick (the web's
@@ -154,7 +180,7 @@ export function Composer({
 
   const send = () => {
     const body = draft.trim();
-    if (!body) return;
+    if (!body && !image) return;
     const mentions = mentionedUserIds(body, members, userId);
     // A reply to a row that is still optimistic has no server id yet.
     const replyId = replyTo && !isTemp(replyTo.id) ? replyTo.id : null;
@@ -163,8 +189,22 @@ export function Composer({
     setDraft("");
     setSelection(undefined);
     setMentionQuery(null);
+    setImage(null);
     if (replyTo) onCancelReply();
-    onSend(body, mentions, replyId);
+    onSend(body, mentions, replyId, image);
+  };
+
+  const pick = async () => {
+    if (picking) return;
+    setPicking(true);
+    try {
+      const picked = await pickChatImage();
+      if (picked) setImage(picked);
+    } catch (e) {
+      console.warn("Picking a photo failed", e);
+    } finally {
+      setPicking(false);
+    }
   };
 
   // Swipe down on the composer to dismiss the keyboard (web:
@@ -179,7 +219,7 @@ export function Composer({
     },
   });
 
-  const canSend = draft.trim().length > 0;
+  const canSend = draft.trim().length > 0 || image != null;
   const replyName = replyTo
     ? replyTo.user_id === userId
       ? "yourself"
@@ -208,7 +248,7 @@ export function Composer({
                 Replying to {replyName}
               </Text>
               <Text numberOfLines={1} style={[Type.footnote, { color: c.muted }]}>
-                {replyTo.body}
+                {messagePreview(replyTo)}
               </Text>
             </View>
             <Pressable
@@ -223,7 +263,52 @@ export function Composer({
           </View>
         )}
 
+        {/* The picture waiting to go, with its caption typed below. */}
+        {image && (
+          <View style={styles.preview}>
+            <View>
+              <Image
+                source={{ uri: image.uri }}
+                style={[styles.thumb, { backgroundColor: c.surface2 }]}
+                contentFit="cover"
+                accessibilityLabel="Photo to send"
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Remove photo"
+                hitSlop={6}
+                onPress={() => setImage(null)}
+                style={[styles.thumbClose, { backgroundColor: c.foreground }]}
+              >
+                <X size={12} color={c.canvas} strokeWidth={2.5} />
+              </Pressable>
+            </View>
+            <Text style={[Type.footnote, { color: c.muted }]}>
+              {Math.max(1, Math.round(image.bytes / 1024))} KB, ready to send
+            </Text>
+          </View>
+        )}
+
         <View style={styles.fieldRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add a photo"
+            accessibilityState={{ busy: picking }}
+            hitSlop={6}
+            disabled={picking}
+            onPress={() => void pick()}
+            style={({ pressed }) => [
+              styles.hideBtn,
+              { backgroundColor: c.surface2 },
+              pressed && styles.sendPressed,
+            ]}
+          >
+            {picking ? (
+              <ActivityIndicator size="small" color={c.muted} />
+            ) : (
+              <ImagePlus size={20} strokeWidth={2.25} color={c.muted} />
+            )}
+          </Pressable>
           {focused && (
             <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(120)}>
               <Pressable
@@ -291,6 +376,24 @@ export function Composer({
 }
 
 const styles = StyleSheet.create({
+  preview: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+  },
+  thumb: { width: 72, height: 72, borderRadius: Radius.md },
+  thumbClose: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   root: {
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,

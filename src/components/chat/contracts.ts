@@ -14,6 +14,7 @@
  */
 import type { StyleProp, TextStyle } from "react-native";
 
+import type { PickedImage } from "@/data/chatImages";
 import type { GroupMember, Message } from "@/lib/types";
 
 /** The composer at the bottom of the chat screen: reply bar, textarea,
@@ -28,13 +29,20 @@ export type ComposerProps = {
   replyTo: Message | null;
   onCancelReply: () => void;
   /**
-   * Called with the trimmed body, the mentioned user ids (from
-   * mentionedUserIds in shared.ts) and the reply target id (null when the
-   * reply target is still an optimistic temp row). The list side inserts the
-   * optimistic row and the server row; the composer has already cleared the
-   * draft, the reply and the typeahead by the time this fires.
+   * Called with the trimmed body (empty for a picture alone), the mentioned
+   * user ids (from mentionedUserIds in shared.ts), the reply target id (null
+   * when the reply target is still an optimistic temp row) and the picture,
+   * already resized on the phone (src/data/chatImages.ts), or null. The list
+   * side uploads it, inserts the optimistic row and the server row; the
+   * composer has already cleared the draft, the picture, the reply and the
+   * typeahead by the time this fires.
    */
-  onSend: (body: string, mentions: string[], replyId: string | null) => void;
+  onSend: (
+    body: string,
+    mentions: string[],
+    replyId: string | null,
+    image: PickedImage | null,
+  ) => void;
   /** Increment to focus the field (startReply does this after a swipe or a
    *  long-press Reply). 0 at mount means "do not focus". */
   focusRequest: number;
