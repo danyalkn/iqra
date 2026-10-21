@@ -1,5 +1,12 @@
 import { BlurTargetView, BlurView } from "expo-blur";
-import { TabList, TabSlot, TabTrigger, Tabs, type TabTriggerSlotProps } from "expo-router/ui";
+import {
+  TabList,
+  TabSlot,
+  TabTrigger,
+  Tabs,
+  defaultTabsSlotRender,
+  type TabTriggerSlotProps,
+} from "expo-router/ui";
 import {
   CalendarCheck,
   ChartColumn,
@@ -85,7 +92,7 @@ export default function AndroidTabs() {
       options={{ backBehavior: "initialRoute" }}
     >
       <BlurTargetView ref={blurTarget} style={styles.flex}>
-        <TabSlot />
+        <TabSlot renderFn={renderEveryTab} />
       </BlurTargetView>
       {/* The triggers must be the direct children of GlassBar: Tabs finds
           them by reading TabList's child's children (asChild). */}
@@ -111,6 +118,20 @@ export default function AndroidTabs() {
     </Tabs>
   );
 }
+
+/**
+ * Mount every tab at launch. NativeTabs did (lazyByDefault false in
+ * expo-router's native-tabs navigator), while the headless TabSlot mounts a
+ * tab on its first visit: on the emulator that first visit to Insights or
+ * Profile kept the previous screen on show for two to three seconds with
+ * the new capsule already lit. Eager mounting is what the 1.0.0 APK did and
+ * what the screens assume ("every tab stays mounted", docs/HANDOFF.md).
+ * The screen options type demands fields the router fills in itself, so
+ * this goes through the slot's render function instead of
+ * `screenOptions.lazy`.
+ */
+const renderEveryTab: typeof defaultTabsSlotRender = (descriptor, options) =>
+  defaultTabsSlotRender(descriptor, { ...options, loaded: true });
 
 type GlassBarProps = ViewProps & { blurTarget: RefObject<ViewRef | null> };
 
