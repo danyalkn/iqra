@@ -34,6 +34,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Placeholder } from "@/components/Placeholder";
 import { Button } from "@/components/ui";
 import { Radius, Type } from "@/constants/theme";
+import { deleteChatImage, uploadChatImage, type PickedImage } from "@/data/chatImages";
 import { useMembership } from "@/hooks/use-membership";
 import { useTabBarClearance } from "@/hooks/use-tab-bar-clearance";
 import { useTheme } from "@/hooks/use-theme";
@@ -726,7 +727,7 @@ function ChatRoom({
   // ── Send ──────────────────────────────────────────────────────────────────
 
   const send = useCallback(
-    async (body: string, mentions: string[], replyId: string | null) => {
+    async (body: string, mentions: string[], replyId: string | null, image: PickedImage | null) => {
       const id = tempId();
       const optimistic: Message = {
         id,
@@ -736,24 +737,58 @@ function ChatRoom({
         mentions,
         reply_to: replyId,
         created_at: new Date().toISOString(),
+        image_path: null,
+        image_w: image?.width ?? null,
+        image_h: image?.height ?? null,
+        local_image: image?.uri,
       };
       setMessages((prev) => [...prev, optimistic]);
       setSendError(null);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
+      const fail = () => {
+        setMessages((prev) => prev.filter((m) => m.id !== id));
+        setSendError(SEND_ERROR);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      };
+
+      // The picture goes up first, under the group's folder; the row then
+      // points at it. The optimistic row shows the local copy meanwhile.
+      let imagePath: string | null = null;
+      if (image) {
+        try {
+          imagePath = await uploadChatImage(groupId, image);
+        } catch (e) {
+          console.warn("Photo upload failed", e);
+          fail();
+          return;
+        }
+      }
+
       const { data, error } = await supabase
         .from("messages")
-        .insert({ group_id: groupId, user_id: userId, body, mentions, reply_to: replyId })
+        .insert({
+          group_id: groupId,
+          user_id: userId,
+          body,
+          mentions,
+          reply_to: replyId,
+          image_path: imagePath,
+          image_w: image?.width ?? null,
+          image_h: image?.height ?? null,
+        })
         .select("*")
         .single();
 
       if (error || !data) {
-        setMessages((prev) => prev.filter((m) => m.id !== id));
-        setSendError(SEND_ERROR);
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        if (imagePath) void deleteChatImage(imagePath);
+        fail();
         return;
       }
-      const saved = data as Message;
+      // Keep showing the copy on this phone: the row is identical to the one
+      // in the bucket, so no download for the sender. The next sync replaces
+      // the row with the server's and the cached copy takes over from there.
+      const saved: Message = { ...(data as Message), local_image: image?.uri };
       // A sync that landed between the commit and this response already
       // merged the server row next to the temp; then just drop the temp, so
       // no id appears twice (FlashList keys and the row maps assume unique).
