@@ -202,6 +202,16 @@ in `docs/SCREEN-TIME.md`, build notes in `docs/FOCUS.md` and SCREEN-TIME's
   covers the tab bar, so while the message field has focus a "Hide
   keyboard" chevron sits left of it. The swipe-down stays as well.
 
+- **Pictures (owner, 2026-10-21).** One picture per message, from the
+  photo library, no videos. Shrunk on the phone before it leaves (long
+  edge 1600 px, JPEG 0.8, EXIF dropped), kept in the private Supabase
+  Storage bucket `chat-images` under the group's folder, readable and
+  writable by that group's members only. Nothing goes through the web
+  app on Fly (the owner's $5 budget) and Firebase is not involved. The
+  push says "Photo" or "Photo: caption". The frozen web PWA shows a
+  picture-only message as an empty bubble until it is retired. Tap opens
+  the picture full screen; no zoom, no saving to the camera roll yet.
+
 ## Stats
 
 - Group khatmah counts every entry type, summed as Uthmani pages.

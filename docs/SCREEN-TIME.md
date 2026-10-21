@@ -228,6 +228,21 @@ bodies):
   logging blocks until midnight (the mid-day guard's two-minute margin);
   before iOS 26.5 "Remind me" is silent when notifications are off.
 
+Device checklist, with the owner (2026-10-21 evening): step 1 passed on
+the owner's iPhone (iOS 26.5) with the dev build: access granted, two
+apps picked, both shielded at once with Iqra's title, icon and buttons.
+Two things seen: the owner's two entries for the day had to be moved
+aside for the shield to show (they sat in `public.focus_test_backup`
+and are back; drop that table when done), and after the subtitle was
+changed the shield kept showing the old line through an app relaunch:
+iOS appears to keep the drawn shield until the block is re-applied
+(pause and resume, or the midnight re-block). Unverified; check on the
+next session's pass. Steps 2 onward (log to unlock, the shield's "Open
+Iqra", airplane mode, the reminder button, pause, turn off, revoke,
+overnight) are still to run. The owner parked a follow-up idea: an
+unlock goal (pages or "my Sabak") shown as progress on the shield
+itself; not building it now.
+
 Next, in order (FOCUS.md § 6 is the detail):
 
 1. Owner: `npx eas-cli@latest build --profile development --platform ios`
