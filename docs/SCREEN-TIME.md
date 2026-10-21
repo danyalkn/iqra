@@ -16,7 +16,10 @@ Two tiers of the `com.apple.developer.family-controls` entitlement:
 
 Request form: https://developer.apple.com/contact/request/family-controls-distribution
 
-**Filed 2026-10-21, Request ID GS68KZ6855.** The form is no longer per
+**Filed and approved 2026-10-21 (same day), Request ID GS68KZ6855.**
+Apple's email: "assigned to your account, and you can now configure this
+capability for eligible apps ... Admins on your team can also use this
+capability." The form is no longer per
 bundle id (forum posts and older guides describe one request per id). It is
 one account-wide request: the page shows the name, email and Team ID
 (Qadam Technologies Inc., `69BV989JDV`), the terms, and a "Get the Family
