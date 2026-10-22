@@ -64,9 +64,13 @@ export function ActionOverlay({
   const { width: vw, height: windowH } = useWindowDimensions();
   const insets = useWindowInsets();
   const reduceMotion = useReducedMotion();
-  // The overlay's real height and the menu's (font size changes both).
-  const [frameH, setFrameH] = useState(windowH);
-  const [menuH, setMenuH] = useState(onCopy ? MENU_ROW_H * 2 + 1 : MENU_ROW_H);
+  // The overlay's real height and the menu's (font size changes both),
+  // null until laid out. Until both are known the pill and menu stay
+  // invisible, so a first frame placed from the estimates never shows and
+  // then jumps (larger text, Reduce Motion with no fade to hide it).
+  const [frameH, setFrameH] = useState<number | null>(null);
+  const [menuH, setMenuH] = useState<number | null>(null);
+  const measured = frameH != null && menuH != null;
 
   // Anchored to the bubble's edge on the sender's side, clamped 8 from the
   // screen edges (web). Vertically the web put the pill 60 above the bubble
@@ -80,23 +84,29 @@ export function ActionOverlay({
   const menuLeft = clampX(mine ? anchor.right - MENU_W : anchor.left, MENU_W);
   const { pillTop, menuTop } = placeVertically(
     anchor,
-    menuH,
+    menuH ?? (onCopy ? MENU_ROW_H * 2 + 1 : MENU_ROW_H),
     insets.top + 8,
-    frameH - insets.bottom - 8,
+    (frameH ?? windowH) - insets.bottom - 8,
   );
 
   // Web: animate-[dialIn_170ms] on the pill and 190ms on the menu (scale +
-  // fade with the spring ease). Reduce motion skips straight to the end.
-  const pillIn = useSharedValue(reduceMotion ? 1 : 0);
-  const menuIn = useSharedValue(reduceMotion ? 1 : 0);
+  // fade with the spring ease), started once both are placed for real.
+  // Reduce motion skips straight to the end.
+  const pillIn = useSharedValue(0);
+  const menuIn = useSharedValue(0);
   useEffect(() => {
-    if (reduceMotion) return;
+    if (!measured) return;
+    if (reduceMotion) {
+      pillIn.set(1);
+      menuIn.set(1);
+      return;
+    }
     const easing = Easing.out(Easing.back(1.6));
     pillIn.set(withTiming(1, { duration: 170, easing }));
     menuIn.set(withTiming(1, { duration: 190, easing }));
     // pillIn/menuIn are stable shared-value refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduceMotion]);
+  }, [measured, reduceMotion]);
   const pillStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, pillIn.get()),
     transform: [{ scale: 0.9 + 0.1 * pillIn.get() }],
