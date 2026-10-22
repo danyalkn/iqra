@@ -16,6 +16,11 @@ type Mode = "signin" | "signup";
 /** Keyboard up, the focused field keeps this much room under it: enough for
  *  the next field or the submit button to show on a small phone too. */
 const FIELD_ROOM = 88;
+/** Sign-up's new-password fields can bring up iOS's "Use Strong Password?"
+ *  panel, which stands about 80 pt taller than the keyboard while the
+ *  reported keyboard frame stays the same; 88 left Create account half
+ *  under it. 24 more clears it. */
+const SIGNUP_FIELD_ROOM = 112;
 
 /**
  * Ported from reference/web-pwa/app/login/LoginForm.tsx. Email + password
@@ -117,7 +122,7 @@ export default function LoginScreen() {
           { paddingTop: 48, paddingBottom: insets.bottom + 24 },
         ]}
         keyboardShouldPersistTaps="handled"
-        bottomOffset={FIELD_ROOM}
+        bottomOffset={mode === "signup" ? SIGNUP_FIELD_ROOM : FIELD_ROOM}
       >
         {!configured && (
           <View style={[styles.warn, { backgroundColor: c.warnTint, borderColor: c.warn }]}>
