@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { NavRow } from "@/components/profile/NavRow";
-import { Button, Card, Input, Sheet } from "@/components/ui";
+import { Button, Card, Input, Sheet, SheetScroll } from "@/components/ui";
 import { Radius, Type } from "@/constants/theme";
 import { setPassword } from "@/data/account";
 import { useTheme } from "@/hooks/use-theme";
@@ -71,8 +71,8 @@ export function ResetPassword() {
       </Card>
 
       <Sheet open={open} onClose={() => setOpen(false)}>
-        {/* The Sheet lifts itself above the keyboard. */}
-        <View style={styles.sheetContent}>
+        {/* The Sheet stays above the keyboard; on a small phone this scrolls. */}
+        <SheetScroll contentContainerStyle={styles.sheetContent} bounces={false}>
           <View style={[styles.iconBox, { backgroundColor: c.accentTint }]}>
             <KeyRound size={24} color={c.accent} />
           </View>
@@ -163,7 +163,7 @@ export function ResetPassword() {
               </View>
             </>
           )}
-        </View>
+        </SheetScroll>
       </Sheet>
     </View>
   );

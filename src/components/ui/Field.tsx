@@ -21,6 +21,8 @@ import { Radius, Type } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 
+import { useRevealFocused } from "./SheetScroll";
+
 /** Section label: footnote, uppercase, wide tracking, faint. */
 export function FieldLabel({
   children,
@@ -44,11 +46,21 @@ type InputProps = TextInputProps & {
 };
 
 /** Bordered text field; focus turns the border accent (web: focus:border-accent
- *  + a soft ring, which native approximates with a 2px accent border). */
-export function Input({ style, onFocus, onBlur, editable = true, ref, ...rest }: InputProps) {
+ *  + a soft ring, which native approximates with a 2px accent border). Inside
+ *  a SheetScroll it scrolls itself into view on focus and as it grows. */
+export function Input({
+  style,
+  onFocus,
+  onBlur,
+  onContentSizeChange,
+  editable = true,
+  ref,
+  ...rest
+}: InputProps) {
   const c = useTheme();
   const scheme = useColorScheme();
   const [focused, setFocused] = useState(false);
+  const reveal = useRevealFocused();
   return (
     <TextInput
       ref={ref}
@@ -60,11 +72,17 @@ export function Input({ style, onFocus, onBlur, editable = true, ref, ...rest }:
       editable={editable}
       onFocus={(e) => {
         setFocused(true);
+        reveal?.();
         onFocus?.(e);
       }}
       onBlur={(e) => {
         setFocused(false);
         onBlur?.(e);
+      }}
+      onContentSizeChange={(e) => {
+        // A note growing a line keeps its caret line above the keyboard.
+        if (focused && rest.multiline) reveal?.();
+        onContentSizeChange?.(e);
       }}
       style={[
         styles.input,

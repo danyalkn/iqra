@@ -1,15 +1,18 @@
 import { Pencil } from "lucide-react-native";
 import { useState } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { TimezonePicker, detectTimezone, isValidTimezone } from "@/components/TimezonePicker";
-import { Avatar, Button, Card, FieldLabel, Input, SegmentedControl, Sheet } from "@/components/ui";
+import {
+  Avatar,
+  Button,
+  Card,
+  FieldLabel,
+  Input,
+  SegmentedControl,
+  Sheet,
+  SheetScroll,
+} from "@/components/ui";
 import { Type } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { ENTRY_META, TYPES_BY_MODE, type Mode } from "@/lib/entries";
@@ -134,13 +137,9 @@ export function ProfileSection() {
       </Pressable>
 
       <Sheet open={open} onClose={() => setOpen(false)} dragAnywhere={false}>
-          {/* The Sheet lifts itself above the keyboard; the content only shrinks. */}
-          <ScrollView
-            style={styles.shrink}
-            contentContainerStyle={styles.sheetContent}
-            keyboardShouldPersistTaps="handled"
-            bounces={false}
-          >
+          {/* The Sheet stays above the keyboard; this shrinks and scrolls to
+              the focused field. */}
+          <SheetScroll contentContainerStyle={styles.sheetContent} bounces={false}>
             <Text style={[Type.title2, styles.title, { color: c.foreground }]}>Edit profile</Text>
 
             <FieldLabel>Display name</FieldLabel>
@@ -203,7 +202,7 @@ export function ProfileSection() {
                 Save
               </Button>
             </View>
-          </ScrollView>
+          </SheetScroll>
 
         {/* Rendered inside the sheet so it stacks as a nested Modal on both
             platforms (a sibling Modal would fight the open one on iOS). */}
@@ -225,7 +224,6 @@ const styles = StyleSheet.create({
   types: { marginTop: 8 },
   pressed: { opacity: 0.85 },
   grow: { flex: 1, minWidth: 0 },
-  shrink: { flexShrink: 1 },
   semibold: { fontWeight: "600" },
   medium: { fontWeight: "500" },
   sheetContent: { paddingHorizontal: 20, paddingTop: 8 },

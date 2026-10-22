@@ -18,13 +18,22 @@ import {
 import {
   AppState,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 
-import { Button, Card, Chip, FieldLabel, Input, SegmentedControl, Sheet, TimeInput } from "@/components/ui";
+import {
+  Button,
+  Card,
+  Chip,
+  FieldLabel,
+  Input,
+  SegmentedControl,
+  Sheet,
+  SheetScroll,
+  TimeInput,
+} from "@/components/ui";
 import { Radius, Type } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { localDate, nextYmd, todayLocal, tomorrowLocal } from "@/lib/dates";
@@ -463,13 +472,9 @@ export function DayReminderSheet({
 
   return (
     <Sheet open={open} onClose={onClose} dragAnywhere={false}>
-        {/* The Sheet lifts itself above the keyboard; the content only shrinks. */}
-        <ScrollView
-          style={styles.shrink}
-          contentContainerStyle={styles.sheetBody}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+        {/* The Sheet stays above the keyboard; this shrinks and scrolls to
+            the focused field. */}
+        <SheetScroll contentContainerStyle={styles.sheetBody}>
           <View style={styles.sheetHeader}>
             <Text accessibilityRole="header" style={[Type.title2, { color: c.foreground }]}>
               Remind me
@@ -595,7 +600,7 @@ export function DayReminderSheet({
           <Button fullWidth style={styles.mt6} onPress={save} loading={busy}>
             Set reminder
           </Button>
-        </ScrollView>
+        </SheetScroll>
     </Sheet>
   );
 }
@@ -638,7 +643,6 @@ const styles = StyleSheet.create({
   },
   sectionError: { marginTop: 8, paddingHorizontal: 4 },
   // Sheet
-  shrink: { flexShrink: 1 },
   sheetBody: { paddingHorizontal: 20, paddingTop: 8 },
   sheetHeader: {
     flexDirection: "row",

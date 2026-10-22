@@ -1,8 +1,8 @@
 import { Search, UserPlus } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
-import { Avatar, Button, Card, FieldLabel, Input, Sheet, Switch } from "@/components/ui";
+import { Avatar, Button, Card, FieldLabel, Input, Sheet, SheetScroll, Switch } from "@/components/ui";
 import { Type } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { useSession } from "@/providers/SessionProvider";
@@ -134,14 +134,9 @@ export function MembersSheet({
 
   return (
     <Sheet open={open} onClose={onClose} dragAnywhere={false}>
-      {/* The Sheet lifts itself above the keyboard and lets this ScrollView
-          shrink; the grab handle still dismisses. */}
-      <ScrollView
-        style={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
-      >
+      {/* The Sheet stays above the keyboard and lets this shrink and scroll
+          to the focused field; the grab handle still dismisses. */}
+      <SheetScroll contentContainerStyle={styles.content}>
         <Text numberOfLines={1} style={[Type.title2, { color: c.foreground }]}>
           {groupName}
         </Text>
@@ -258,13 +253,12 @@ export function MembersSheet({
             </Card>
           ))}
         </View>
-      </ScrollView>
+      </SheetScroll>
     </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flexShrink: 1 },
   // Web: px-5 pt-2.
   content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8 },
   count: { marginTop: 2, marginBottom: 16 },

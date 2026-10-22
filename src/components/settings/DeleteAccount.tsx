@@ -2,7 +2,7 @@ import { AlertTriangle, Trash2 } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { Button, Input, Sheet } from "@/components/ui";
+import { Button, Input, Sheet, SheetScroll } from "@/components/ui";
 import { Radius, Type } from "@/constants/theme";
 import { deleteAccount } from "@/data/account";
 import { useTheme } from "@/hooks/use-theme";
@@ -54,8 +54,8 @@ export function DeleteAccount() {
       </Pressable>
 
       <Sheet open={open} onClose={() => setOpen(false)}>
-          {/* The Sheet lifts itself above the keyboard. */}
-          <View style={styles.sheetContent}>
+          {/* The Sheet stays above the keyboard; on a small phone this scrolls. */}
+          <SheetScroll contentContainerStyle={styles.sheetContent} bounces={false}>
             <View style={[styles.iconBox, { backgroundColor: c.dangerTint }]}>
               <AlertTriangle size={24} color={c.danger} />
             </View>
@@ -102,7 +102,7 @@ export function DeleteAccount() {
                 Delete forever
               </Button>
             </View>
-          </View>
+          </SheetScroll>
       </Sheet>
     </View>
   );
