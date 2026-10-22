@@ -112,9 +112,17 @@ export async function getGroupPagesAllTime(
 export async function getMyMembership(
   supabase: Client,
 ): Promise<Membership | null> {
+  // RLS shows every member's row in your groups (the roster), so filter to
+  // your own: unfiltered, the earliest-joined row (the owner's) won and
+  // every member got the owner's role, and with it the owner-only "Add
+  // member" search. (Fix to mirror to the web repo.)
+  const { data: auth } = await supabase.auth.getSession();
+  const userId = auth.session?.user.id;
+  if (!userId) return null;
   const { data, error } = await supabase
     .from("group_members")
     .select("group_id, role, groups(name)")
+    .eq("user_id", userId)
     .order("joined_at", { ascending: true })
     .limit(1)
     .maybeSingle();

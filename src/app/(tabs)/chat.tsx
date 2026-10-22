@@ -166,20 +166,26 @@ async function fetchGroupChatReads(groupId: string): Promise<ChatRead[] | null> 
  *  already showing the placeholder; kept as belt and braces, same select as
  *  the helper plus one token refresh. */
 async function fetchMyMembership(): Promise<Membership | null | undefined> {
-  const read = () =>
+  // Filtered to my own row: RLS shows the whole roster, and unfiltered the
+  // owner's (earliest) row made every member the owner.
+  const read = (userId: string) =>
     supabase
       .from("group_members")
       .select("group_id, role, groups(name)")
+      .eq("user_id", userId)
       .order("joined_at", { ascending: true })
       .limit(1)
       .maybeSingle();
-  let { data, error } = await read();
+  // No session at all means the anon key would answer, which says nothing
+  // about membership.
+  const { data: first } = await supabase.auth.getSession();
+  if (!first.session) return undefined;
+  let { data, error } = await read(first.session.user.id);
   if (error || !data) {
-    // Refresh an expired token, then ask once more; no session at all means
-    // the anon key answered, which says nothing about membership.
+    // Refresh an expired token, then ask once more.
     const { data: s } = await supabase.auth.getSession();
     if (!s.session) return undefined;
-    ({ data, error } = await read());
+    ({ data, error } = await read(s.session.user.id));
   }
   if (error) return undefined;
   if (!data) return null;
