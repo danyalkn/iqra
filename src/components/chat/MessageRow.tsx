@@ -171,6 +171,17 @@ export function MessageRow({
   } = meta;
   const mid = msg.id;
   const bubbleRef = useRef<ComponentRef<typeof View>>(null);
+  // FlashList recycles rows: a sync re-rendering the list can hand the row
+  // under a finger another message while the finger is still down, or while
+  // the keyboard closes before the measure. Seen once on iOS: the menu
+  // opened on the message above the picture that was pressed. Remember the
+  // message the press began on and the one the row shows now; a long press
+  // whose messages differ is dropped instead of anchored to the wrong one.
+  const pressedMid = useRef<string | null>(null);
+  const shownMid = useRef(mid);
+  useEffect(() => {
+    shownMid.current = mid;
+  }, [mid]);
 
   // The picture, when there is one: the sender's own copy while it is on
   // this phone, else the stored object (downloaded once, then from disk).
@@ -248,13 +259,22 @@ export function MessageRow({
   }));
 
   const handlePress = () => onPress(mid);
+  const handlePressIn = () => {
+    pressedMid.current = mid;
+  };
   const handleLongPress = () => {
+    if (pressedMid.current !== mid) return;
+    openActions();
+  };
+  const openActions = () => {
     if (pending) return;
     // Window coordinates: the overlay is a Modal positioned in the same space.
-    const measure = () =>
+    const measure = () => {
+      if (shownMid.current !== mid) return;
       bubbleRef.current?.measureInWindow((x, y, w, h) =>
         onLongPress(mid, { top: y, bottom: y + h, left: x, right: x + w }),
       );
+    };
     if (!KeyboardController.isVisible()) {
       measure();
       return;
@@ -280,7 +300,7 @@ export function MessageRow({
     if (pending) return;
     switch (e.nativeEvent.actionName) {
       case "react":
-        handleLongPress();
+        openActions();
         break;
       case "reply":
         onSwipeReply(mid);
@@ -367,6 +387,7 @@ export function MessageRow({
             <Pressable
               ref={bubbleRef}
               onPress={handlePress}
+              onPressIn={handlePressIn}
               onLongPress={pending ? undefined : handleLongPress}
               delayLongPress={LONG_PRESS_MS}
               accessibilityActions={a11yActions}
@@ -395,6 +416,7 @@ export function MessageRow({
                   accessibilityRole="imagebutton"
                   accessibilityLabel="Photo"
                   onPress={handlePhotoPress}
+                  onPressIn={handlePressIn}
                   onLongPress={pending ? undefined : handleLongPress}
                   delayLongPress={LONG_PRESS_MS}
                   style={[styles.photoWrap, msg.body ? styles.photoAboveCaption : null]}
