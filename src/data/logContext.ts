@@ -74,7 +74,7 @@ export async function logContext(
   const wait = savedProfile && groupGuess && savedToday ? QUICK_MS : READ_MS;
   const [profileRes, membershipRes, guessedRecent] = await Promise.all([
     withTimeout(fetchProfile(userId), wait),
-    withTimeout(getMyMembership(supabase), wait),
+    withTimeout(getMyMembership(supabase, userId), wait),
     groupGuess ? withTimeout(fetchMyRecentEntries(groupGuess, userId), wait) : null,
   ]);
 

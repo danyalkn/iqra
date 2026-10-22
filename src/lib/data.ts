@@ -111,14 +111,16 @@ export async function getGroupPagesAllTime(
  *  also redirects to the "not in a circle" placeholder.) */
 export async function getMyMembership(
   supabase: Client,
+  userId: string,
 ): Promise<Membership | null> {
   // RLS shows every member's row in your groups (the roster), so filter to
   // your own: unfiltered, the earliest-joined row (the owner's) won and
   // every member got the owner's role, and with it the owner-only "Add
-  // member" search. (Fix to mirror to the web repo.)
-  const { data: auth } = await supabase.auth.getSession();
-  const userId = auth.session?.user.id;
-  if (!userId) return null;
+  // member" search. The caller passes the user it already knows rather than
+  // this asking auth.getSession(): offline with an expired token that
+  // answers "no session", which would read as "not in a circle" and be
+  // cached. (Fix to mirror to the web repo, which should pass the user
+  // from its verified getUser().)
   const { data, error } = await supabase
     .from("group_members")
     .select("group_id, role, groups(name)")

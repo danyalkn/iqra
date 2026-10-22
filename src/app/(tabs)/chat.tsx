@@ -165,10 +165,15 @@ async function fetchGroupChatReads(groupId: string): Promise<ChatRead[] | null> 
  *  second opinion only matters for a null that arrived while the chat was
  *  already showing the placeholder; kept as belt and braces, same select as
  *  the helper plus one token refresh. */
-async function fetchMyMembership(): Promise<Membership | null | undefined> {
+async function fetchMyMembership(
+  userId: string | null,
+): Promise<Membership | null | undefined> {
+  if (!userId) return undefined;
   // Filtered to my own row: RLS shows the whole roster, and unfiltered the
-  // owner's (earliest) row made every member the owner.
-  const read = (userId: string) =>
+  // owner's (earliest) row made every member the owner. The user comes from
+  // the session the screen already has: asking auth.getSession() first could
+  // block for half a minute offline with an expired token.
+  const read = () =>
     supabase
       .from("group_members")
       .select("group_id, role, groups(name)")
@@ -176,16 +181,13 @@ async function fetchMyMembership(): Promise<Membership | null | undefined> {
       .order("joined_at", { ascending: true })
       .limit(1)
       .maybeSingle();
-  // No session at all means the anon key would answer, which says nothing
-  // about membership.
-  const { data: first } = await supabase.auth.getSession();
-  if (!first.session) return undefined;
-  let { data, error } = await read(first.session.user.id);
+  let { data, error } = await read();
   if (error || !data) {
-    // Refresh an expired token, then ask once more.
+    // Refresh an expired token, then ask once more; no session at all means
+    // the anon key answered, which says nothing about membership.
     const { data: s } = await supabase.auth.getSession();
     if (!s.session) return undefined;
-    ({ data, error } = await read(s.session.user.id));
+    ({ data, error } = await read());
   }
   if (error) return undefined;
   if (!data) return null;
@@ -230,7 +232,7 @@ export default function ChatScreen() {
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: c.canvas }]}>
       {membership === null ? (
-        <NoCircleCheck onFound={setFound} refresh={refresh} />
+        <NoCircleCheck userId={user?.id ?? null} onFound={setFound} refresh={refresh} />
       ) : !membership || !user ? (
         <View style={styles.center}>
           <ActivityIndicator color={c.muted} />
@@ -260,9 +262,11 @@ type CheckState = "checking" | "failed" | "none";
  *  and only a confirmed null shows the Placeholder. Re-checked on foreground
  *  return and on focus, since the owner adds people in SQL. */
 function NoCircleCheck({
+  userId,
   onFound,
   refresh,
 }: {
+  userId: string | null;
   onFound: (m: Membership) => void;
   refresh: () => Promise<Membership | null>;
 }) {
@@ -273,7 +277,7 @@ function NoCircleCheck({
 
   const check = useCallback((): Promise<void> => {
     const mine = ++seq.current;
-    return fetchMyMembership().then((m) => {
+    return fetchMyMembership(userId).then((m) => {
       if (mine !== seq.current) return;
       if (m === undefined) {
         setState("failed");
@@ -284,7 +288,7 @@ function NoCircleCheck({
         void refresh().catch(() => {});
       }
     });
-  }, [onFound, refresh]);
+  }, [userId, onFound, refresh]);
 
   useEffect(() => {
     void check();

@@ -33,7 +33,7 @@ function load(userId: string, force = false): Promise<Membership | null> {
   if (!force && cache.has(userId)) return Promise.resolve(cache.get(userId) ?? null);
   const pending = inflight.get(userId);
   if (pending && !force) return pending;
-  const p = getMyMembership(supabase)
+  const p = getMyMembership(supabase, userId)
     .then((m) => {
       cache.set(userId, m);
       void writeCache("membership", userId, { m });
