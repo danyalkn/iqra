@@ -133,6 +133,41 @@ function displayName(tz: string): string {
   return tz.replace(/_/g, " ");
 }
 
+/**
+ * "GMT-4", "GMT+5:30" or "GMT" for the zone at `now`, from its wall clock.
+ * Intl's timeZoneName "shortOffset" said plain "GMT" for every zone on iOS
+ * (Hermes there), so the offset is worked out instead: the zone's local
+ * date and time read as if UTC, minus the instant (src/lib/dates does the
+ * same for zonedIso). Null if Intl cannot render the zone.
+ */
+function offsetLabel(tz: string, now: Date): string | null {
+  try {
+    const p: Record<string, string> = {};
+    for (const part of new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).formatToParts(now)) {
+      p[part.type] = part.value;
+    }
+    // Some engines render midnight as 24.
+    const asIfUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute);
+    // The wall clock has no seconds, so compare it with the instant's minute.
+    const minutes = Math.round((asIfUtc - Math.floor(now.getTime() / 60_000) * 60_000) / 60_000);
+    if (!Number.isFinite(minutes)) return null;
+    if (minutes === 0) return "GMT";
+    const abs = Math.abs(minutes);
+    const mm = abs % 60 ? `:${String(abs % 60).padStart(2, "0")}` : "";
+    return `GMT${minutes < 0 ? "-" : "+"}${Math.floor(abs / 60)}${mm}`;
+  } catch {
+    return null;
+  }
+}
+
 /** "GMT-4 · 3:45 PM" for the zone right now; null when Intl cannot do it. */
 function zoneDetail(tz: string, now: Date): string | null {
   let time: string;
@@ -145,21 +180,8 @@ function zoneDetail(tz: string, now: Date): string | null {
   } catch {
     return null;
   }
-  try {
-    // "shortOffset" is the newest of these options on Hermes; if it throws
-    // the row still shows the local time.
-    const offset = new Intl.DateTimeFormat("en-US", {
-      timeZone: tz,
-      timeZoneName: "shortOffset",
-      hour: "numeric",
-      minute: "2-digit",
-    })
-      .formatToParts(now)
-      .find((p) => p.type === "timeZoneName")?.value;
-    return offset ? `${offset} · ${time}` : time;
-  } catch {
-    return time;
-  }
+  const offset = offsetLabel(tz, now);
+  return offset ? `${offset} · ${time}` : time;
 }
 
 type Props = {
