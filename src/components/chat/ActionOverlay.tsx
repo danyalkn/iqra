@@ -1,5 +1,5 @@
 import { Copy, Reply } from "lucide-react-native";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, {
   Easing,
@@ -8,6 +8,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Elevation, Radius, Type } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
@@ -24,6 +25,11 @@ export type Anchor = {
 
 const PILL_W = 272;
 const MENU_W = 168;
+/** Pill top to the top of a menu stacked under it (web: pillTop + 56; the
+ *  pill is 52 tall). */
+const PILL_STEP = 56;
+/** One menu row (12 + 22 + 12) until the real menu reports its height. */
+const MENU_ROW_H = 46;
 /** Scrim behind the overlay (web: bg-black/25). */
 const SCRIM = "rgba(0, 0, 0, 0.25)";
 
@@ -55,19 +61,29 @@ export function ActionOverlay({
   onClose: () => void;
 }) {
   const c = useTheme();
-  const { width: vw } = useWindowDimensions();
+  const { width: vw, height: windowH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
+  // The overlay's real height and the menu's (font size changes both).
+  const [frameH, setFrameH] = useState(windowH);
+  const [menuH, setMenuH] = useState(onCopy ? MENU_ROW_H * 2 + 1 : MENU_ROW_H);
 
-  // Same placement as the web: anchored to the bubble's edge on the sender's
-  // side, clamped 8 from the screen edges; the pill goes 60 above when there
-  // is room, else 10 below, and the menu sits 10 under the bubble or 56
-  // under the pill.
+  // Anchored to the bubble's edge on the sender's side, clamped 8 from the
+  // screen edges (web). Vertically the web put the pill 60 above the bubble
+  // and the menu 10 under it, or both under the bubble near the top. It had
+  // no pictures: a tall picture near the composer pushed the menu off the
+  // bottom, so when the menu has no room below, pill and menu stack above
+  // the bubble, and a bubble taller than the screen gets both pinned to
+  // the safe edges over it.
   const clampX = (x: number, w: number) => Math.min(Math.max(x, 8), vw - w - 8);
   const pillLeft = clampX(mine ? anchor.right - PILL_W : anchor.left, PILL_W);
   const menuLeft = clampX(mine ? anchor.right - MENU_W : anchor.left, MENU_W);
-  const roomAbove = anchor.top - 64 >= 12;
-  const pillTop = roomAbove ? anchor.top - 60 : anchor.bottom + 10;
-  const menuTop = roomAbove ? anchor.bottom + 10 : pillTop + 56;
+  const { pillTop, menuTop } = placeVertically(
+    anchor,
+    menuH,
+    insets.top + 8,
+    frameH - insets.bottom - 8,
+  );
 
   // Web: animate-[dialIn_170ms] on the pill and 190ms on the menu (scale +
   // fade with the spring ease). Reduce motion skips straight to the end.
@@ -104,6 +120,7 @@ export function ActionOverlay({
         accessibilityLabel="Close"
         style={styles.scrim}
         onPress={onClose}
+        onLayout={(e) => setFrameH(e.nativeEvent.layout.height)}
       />
 
       {/* Quick reactions */}
@@ -134,6 +151,7 @@ export function ActionOverlay({
 
       {/* Actions */}
       <Animated.View
+        onLayout={(e) => setMenuH(e.nativeEvent.layout.height)}
         style={[
           styles.menu,
           Elevation.e3,
@@ -167,6 +185,28 @@ export function ActionOverlay({
       </Animated.View>
     </Modal>
   );
+}
+
+/** Tops of the pill and the menu, in order of preference: the web's split
+ *  (pill above, menu below), both below (a bubble near the top), both above
+ *  (a bubble near the bottom), else pinned to the safe edges. */
+function placeVertically(anchor: Anchor, menuH: number, minTop: number, maxBottom: number) {
+  const splitPill = anchor.top - 60;
+  const splitMenu = anchor.bottom + 10;
+  if (splitPill >= minTop && splitMenu + menuH <= maxBottom) {
+    return { pillTop: splitPill, menuTop: splitMenu };
+  }
+  const belowPill = anchor.bottom + 10;
+  if (splitPill < minTop && belowPill + PILL_STEP + menuH <= maxBottom) {
+    return { pillTop: belowPill, menuTop: belowPill + PILL_STEP };
+  }
+  const aboveMenu = anchor.top - 10 - menuH;
+  if (aboveMenu - PILL_STEP >= minTop) {
+    return { pillTop: aboveMenu - PILL_STEP, menuTop: aboveMenu };
+  }
+  const pillTop = Math.max(minTop, Math.min(splitPill, maxBottom - menuH - PILL_STEP));
+  const menuTop = Math.max(pillTop + PILL_STEP, Math.min(splitMenu, maxBottom - menuH));
+  return { pillTop, menuTop };
 }
 
 const styles = StyleSheet.create({

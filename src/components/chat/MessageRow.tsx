@@ -3,7 +3,6 @@ import { Image } from "expo-image";
 import { Reply } from "lucide-react-native";
 import { useEffect, useRef, type ComponentRef } from "react";
 import {
-  Keyboard,
   Pressable,
   StyleSheet,
   Text,
@@ -11,6 +10,7 @@ import {
   type AccessibilityActionEvent,
 } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
+import { KeyboardController } from "react-native-keyboard-controller";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -255,26 +255,26 @@ export function MessageRow({
       bubbleRef.current?.measureInWindow((x, y, w, h) =>
         onLongPress(mid, { top: y, bottom: y + h, left: x, right: x + w }),
       );
-    if (!Keyboard.isVisible()) {
+    if (!KeyboardController.isVisible()) {
       measure();
       return;
     }
     // The overlay drops the keyboard, and the list grows back under it, so a
     // bubble measured now would sit a keyboard height away from where it
-    // ends up. Dismiss first and measure once the keyboard is gone (a frame
-    // later, after the avoiding view's last layout); the timer covers a hide
-    // event that never comes.
+    // ends up. Dismiss first and measure once the keyboard is gone: on
+    // keyboard-controller's hide, which fires when the slide-down ends (RN's
+    // keyboardDidHide fires as it starts on Android, which put the menu over
+    // the picture), then a frame later for the list's last layout. The timer
+    // covers a hide event that never comes.
     let done = false;
     const afterHide = () => {
       if (done) return;
       done = true;
-      sub.remove();
       clearTimeout(fallback);
       requestAnimationFrame(measure);
     };
-    const sub = Keyboard.addListener("keyboardDidHide", afterHide);
-    const fallback = setTimeout(afterHide, 600);
-    Keyboard.dismiss();
+    const fallback = setTimeout(afterHide, 800);
+    void KeyboardController.dismiss().then(afterHide);
   };
   const handleA11yAction = (e: AccessibilityActionEvent) => {
     if (pending) return;
