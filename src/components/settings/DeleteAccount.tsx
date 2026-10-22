@@ -53,7 +53,7 @@ export function DeleteAccount() {
         </Text>
       </Pressable>
 
-      <Sheet open={open} onClose={() => setOpen(false)}>
+      <Sheet open={open} onClose={() => setOpen(false)} dragAnywhere={false}>
           {/* The Sheet stays above the keyboard; on a small phone this scrolls. */}
           <SheetScroll contentContainerStyle={styles.sheetContent} bounces={false}>
             <View style={[styles.iconBox, { backgroundColor: c.dangerTint }]}>
