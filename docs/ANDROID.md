@@ -621,7 +621,15 @@ RN 0.88.0, reanimated, worklets, safe-area-context; expo-status-bar's
 StatusBar.setStyle is RN core's setBarStyle), no package, plugin, patch
 or app.json change in the range, and the iOS export has 0 `ExpoBlur`.
 
-To ship it (owner's call when), three EAS Updates:
+**Shipped 2026-10-22** (owner: "push everything"), all from 3457526:
+iOS production runtime 1.0.0, the TestFlight build the circle runs,
+group d9e0d2db-cfea-48af-a3dd-4dd03bb8650a (app.json held at 1.0.0 for
+the publish and restored); iOS production runtime 1.2.0, group
+162f0f03-92d5-4b76-9f02-a46114dc061c; Android preview runtime 1.2.0
+(build 6), group a2809ea7-d168-423f-a180-44e516ad49a9. Each lands after
+two relaunches. main pushed to GitHub the same night.
+
+How it was shipped, three EAS Updates:
 
 1. iOS TestFlight 1.0.0, what the circle runs today: set app.json
    `version` to `1.0.0` (the runtime follows it), then
