@@ -53,6 +53,10 @@ supabase/.temp/
 # Firebase service account keys (secret, they live on EAS only)
 *firebase-adminsdk*.json
 
+# Firebase Android client config: EAS builds read it from the secret file
+# variable GOOGLE_SERVICES_JSON (app.config.js); keep the local copy untracked.
+google-services.json
+
 # Extension targets copied from node_modules/react-native-device-activity by its
 # config plugin on every config evaluation (prebuild, expo config); never edited.
 /targets
