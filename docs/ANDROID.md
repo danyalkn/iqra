@@ -503,16 +503,102 @@ captioned picture, no Copy on a caption-less one, the reply bar reading
 designed, zero FATAL or missing-module lines in logcat. Chat pictures
 were tested against the Demo Circle only; nothing reached the real one.
 
-Seen, not fixed (small): in the Log Reading sheet the numeric keyboard
-covers "Save entry" until the keyboard's check key hides it; the
-long-press menu on an own message near the bottom opens over the
-picture instead of beside it. Library warnings (`ExpoModulesV2`
-Enumerable, `OnBackInvokedCallback`) are harmless; predictive back is
-off on purpose.
+Seen on this run and fixed the same evening (see "Keyboard and layout
+pass" below): in the Log Reading sheet the numeric keyboard covered
+"Save entry" until the keyboard's check key hid it; the long-press menu
+on an own message near the bottom opened over the picture instead of
+beside it. Library warnings (`ExpoModulesV2` Enumerable,
+`OnBackInvokedCallback`) are harmless; predictive back is off on
+purpose.
 
 Still with the owner (unchanged from "Moving the Android member over"):
 send him the build 6 page instead of build 4's, his email, the OK for a
 test push, and the web push row cleanup.
+
+## Keyboard and layout pass (2026-10-21, both platforms)
+
+Owner request after the build 6 run: fix the two items above and every
+other visual or keyboard bug, both platforms. 24 commits, e41d9da..06474a2,
+JS only (no native change, so both 1.2.0 binaries can take it by EAS
+Update; **nothing has been published yet**). Verified on the `iqra-play`
+emulator (debug build on Metro) and the iPhone 16 Pro simulator (fresh
+dev build of main), then swept screen by screen by two Sonnet agents
+(light, dark, large text, a smaller display size) whose findings were
+fixed too. Throwaway account in the Demo Circle, deleted after: zero
+rows in any public table, its one picture deleted from Storage as its
+owner.
+
+What was wrong and what changed (the commit bodies have the detail):
+
+- **No sheet moved for the Android keyboard.** keyboard-controller sets
+  every Modal window to adjustNothing and the Sheet's RN
+  KeyboardAvoidingView had no Android behaviour. `Sheet` now pads its
+  panel by keyboard-controller's keyboard height on both platforms
+  (padding, not lifting, so the paper runs behind iOS 26's translucent
+  keyboard), drops a keyboard left up by a field outside the sheet when
+  it opens, and lowers its own field's keyboard as it closes.
+- **iOS never scrolls a focused field into view.** New `SheetScroll`
+  (src/components/ui/SheetScroll.tsx) does, on keyboard settle, on focus
+  and as a note grows; `Input` calls it through context. Every sheet form
+  uses it, with `SheetFooter` pinning the error line and actions under
+  the scroll, and the log and reminder sheets pin their title row above
+  it. Decided against keyboard-controller's KeyboardAwareScrollView there
+  (it measures against the keyboard and adds its own space, which
+  double-counts inside a padded sheet).
+- **Sign-in, sign-up and onboarding** used RN's KeyboardAvoidingView, a
+  no-op on Android (the window never resizes under KeyboardProvider):
+  now keyboard-controller's KeyboardAwareScrollView on both platforms.
+  Return moves field to field and the last field submits (also Reset
+  password).
+- **Chat long-press menu over the picture:** MessageRow measured the
+  bubble on RN's keyboardDidHide, which fires as the Android keyboard
+  starts down; it now waits for `KeyboardController.dismiss()`. The
+  overlay is bounded by the safe area and stacks pill and menu above a
+  bubble near the composer. Photo viewer: drops the keyboard, light
+  status bar, runs under the navigation bar.
+- **iOS tab screens report the tab bar as safe area** (NativeTabs gives
+  each its own SafeAreaProvider: 83 pt bottom, not 34), so every sheet
+  had a 49 pt empty band and the chat menu stopped short.
+  `useWindowInsets` (launch metrics on iOS) feeds Sheet, ActionOverlay
+  and ImageViewer.
+- **Android drew some row labels a hair narrower than it measured them**
+  and wrapped the last word out of sight ("Your week" as "Your", "juz
+  this week so far" without "far"). It lives in React Native's prebuilt
+  Android text code, so the at-risk labels take their row's free width
+  instead (flex 1 / flexGrow 1). Watch for it in new rows: a multi-word
+  label sitting at its own width in a row is the risk.
+- Smaller: pages read takes "1,5" and Arabic digits; the time zone
+  picker shows real offsets on iOS (Intl's shortOffset said "GMT");
+  avatars read "AD" not "A("; dark sheets get a hairline edge; the
+  Android switch uses Material's colour roles; 44 pt touch areas on the
+  small links; Insights pads its root for the status bar like the other
+  tabs and says "1 day" / "1 entry"; Feed's delete button moved to the
+  title line so my rows show the whole surah; settings row notes wrap;
+  the profile card drops the types line when it only repeats "Reading";
+  text buttons label themselves (RN Android kept "busy" in TalkBack).
+- **Not visual, found on the way:** `getMyMembership` (src/lib/data.ts)
+  and chat's copy read the earliest-joined `group_members` row without
+  filtering to the user, so every member who joined after the owner got
+  the owner's role and saw the owner-only "Add member" search (the
+  server refused it). Both now filter on the session's user id; the web
+  repo needs the same filter (HANDOFF working notes).
+
+Left as is, on purpose:
+
+- iOS's own "Use Strong Password?" panel on sign-up is taller than the
+  keyboard and overlaps the bottom 15 pt of Create account; the button
+  still works and the normal keyboard leaves it clear.
+- The chat overlay dims the pressed bubble with everything else (web
+  parity); the pill and menu sit beside it.
+- With the largest text sizes and the keyboard up, the log sheet's form
+  scrolls inside a short space; nothing is unreachable.
+- Once on iOS a long-press opened the menu for the neighbouring message
+  right after the chat loaded; it did not happen again in six more
+  tries (keyboard up and down).
+
+To ship it: `npx eas-cli@latest update --channel production --environment production --platform ios --message "..." --non-interactive`
+for iOS 1.2.0, and the same with `--channel preview --environment preview --platform android`
+for build 6 (both runtime 1.2.0). Owner's call when.
 
 ## Kickoff brief for the next session (paste as the first message)
 

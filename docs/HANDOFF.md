@@ -560,6 +560,16 @@ once Apple approves the entitlement; do not block Phase 3 on it.
   shared-lib addition (pure; the web is frozen, nothing to mirror). It feeds
   `ReadingWeeksCard` on Insights (Mine): juz of Reading/Revising per week
   against a 1-juz line. `PagesBarChart` gained an optional `goal` line.
+- Keyboard and layout pass (2026-10-21, docs/ANDROID.md "Keyboard and
+  layout pass"): sheets, sign-in and onboarding now handle the keyboard
+  on both platforms (`Sheet`, `SheetScroll`/`SheetFooter`,
+  keyboard-controller's KeyboardAwareScrollView), Modals read
+  `useWindowInsets`, and a list of smaller visual fixes. Shared lib fix to
+  mirror to the web repo: `getMyMembership` in `src/lib/data.ts` now
+  filters `group_members` to the signed-in user
+  (`.eq("user_id", session.user.id)`). Unfiltered, RLS returned the whole
+  roster and the earliest row (the owner's) won, so every member got the
+  owner's role and the owner-only add-member UI.
 - Ultracode: good for Phase 1 and 2 (independent screens). Not for Phase 0,
   3, or 4, which need one consistent thread of decisions.
 - Model guidance from the owner (revised 2026-10-16): the main session runs
