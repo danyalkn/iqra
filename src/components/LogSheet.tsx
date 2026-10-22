@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import {
   AppState,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +17,7 @@ import {
   Input,
   SegmentedControl,
   Sheet,
+  SheetScroll,
   Switch,
   Textarea,
 } from "@/components/ui";
@@ -147,19 +147,7 @@ export function LogSheet(props: Props) {
 
   return (
     <Sheet open={open} onClose={onClose} dragAnywhere={false}>
-      {/* Three 200px wheels plus fields outgrow a small phone: the Sheet caps
-          its panel at 92%, lifts itself above the keyboard and lets the
-          content shrink, so this ScrollView scrolls instead of being clipped.
-          The grab handle still dismisses. */}
-      <ScrollView
-        style={styles.kav}
-        keyboardShouldPersistTaps="handled"
-        bounces={false}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
-      >
-        <LogForm key={shown.key} {...props} editing={shown.editing} mush={shown.mush} />
-      </ScrollView>
+      <LogForm key={shown.key} {...props} editing={shown.editing} mush={shown.mush} />
     </Sheet>
   );
 }
@@ -466,169 +454,128 @@ function LogForm({
   const caption = [Type.caption, styles.caption, { color: c.faint }];
 
   return (
-    <View>
-      <View style={styles.header}>
-        <Text accessibilityRole="header" style={[Type.title2, { color: c.foreground }]}>
-          {editing ? "Edit" : "Log"} {meta.label}
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-          hitSlop={8}
-          onPress={onClose}
-          style={[styles.closeBtn, { backgroundColor: c.surface2 }]}
-        >
-          <X size={16} color={c.muted} />
-        </Pressable>
-      </View>
-      <Text style={[Type.footnote, styles.desc, { color: c.muted }]}>{meta.desc}</Text>
+    <>
+      {/* Three 200px wheels plus fields outgrow a small phone, and the
+          keyboard takes half of any phone: the Sheet caps its panel at 92%,
+          keeps it above the keyboard and lets this shrink and scroll (to the
+          focused field) instead of being clipped. The grab handle still
+          dismisses. */}
+      <SheetScroll bounces={false} contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <Text accessibilityRole="header" style={[Type.title2, { color: c.foreground }]}>
+            {editing ? "Edit" : "Log"} {meta.label}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            hitSlop={8}
+            onPress={onClose}
+            style={[styles.closeBtn, { backgroundColor: c.surface2 }]}
+          >
+            <X size={16} color={c.muted} />
+          </Pressable>
+        </View>
+        <Text style={[Type.footnote, styles.desc, { color: c.muted }]}>{meta.desc}</Text>
 
-      {reading ? (
-        <View style={styles.readingWrap}>
-          <View style={styles.centered}>
-            <FieldLabel style={styles.labelTight}>Pages read</FieldLabel>
-            <View style={styles.inline}>
-              <Input
-                ref={pagesRef}
-                keyboardType="decimal-pad"
-                placeholder="0"
-                value={pagesRead}
-                onChangeText={onPagesReadChange}
-                accessibilityLabel="Pages read"
-                style={[Type.title2, styles.pagesInput]}
-              />
-              <Text style={[Type.callout, { color: c.muted }]}>pages</Text>
-            </View>
-          </View>
-          <View style={styles.fullWidth}>
-            {/* Auto-advance the bookmark: last page = previous + pages read.
-                Hidden while backdating - see `autoAdvance`. */}
-            {!backdating && (
-              <Card style={styles.toggleRow}>
-                <View style={styles.grow}>
-                  <Text style={[Type.callout, styles.semibold, { color: c.foreground }]}>
-                    Continue from last page
-                  </Text>
-                  <Text style={[Type.footnote, { color: c.muted }]}>{autoNote}</Text>
-                </View>
-                <Switch
-                  value={autoPage}
-                  onValueChange={setAutoPage}
-                  accessibilityLabel="Continue from last page"
-                />
-              </Card>
-            )}
-
-            {autoAdvance ? (
-              <View style={styles.locRow}>
-                {finalLoc ? (
-                  <>
-                    <LocationPill
-                      text={`Finished p.${finalLoc.page} · Juz ${finalLoc.juz} · ${finalLoc.surah.name}`}
-                      arabic={finalLoc.surah.arabic}
-                    />
-                    <NextStartHint page={finalLoc.page} maxPage={maxPage} />
-                  </>
-                ) : (
-                  <Text style={[Type.footnote, { color: c.faint }]}>
-                    Enter pages read to set your bookmark
-                  </Text>
-                )}
-              </View>
-            ) : (
-              <View style={styles.manual}>
-                <FieldLabel style={styles.labelTight}>
-                  {backdating
-                    ? "Last page you finished yesterday (optional)"
-                    : "Last page you finished (optional)"}
-                </FieldLabel>
+        {reading ? (
+          <View style={styles.readingWrap}>
+            <View style={styles.centered}>
+              <FieldLabel style={styles.labelTight}>Pages read</FieldLabel>
+              <View style={styles.inline}>
                 <Input
-                  keyboardType="number-pad"
-                  placeholder={`1–${maxPage}`}
-                  value={stoppedAt}
-                  onChangeText={onStoppedChange}
-                  accessibilityLabel="Last page you finished"
-                  style={styles.lastPageInput}
+                  ref={pagesRef}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  value={pagesRead}
+                  onChangeText={onPagesReadChange}
+                  accessibilityLabel="Pages read"
+                  style={[Type.title2, styles.pagesInput]}
                 />
-                <View style={styles.locRowTight}>
-                  {readLoc ? (
+                <Text style={[Type.callout, { color: c.muted }]}>pages</Text>
+              </View>
+            </View>
+            <View style={styles.fullWidth}>
+              {/* Auto-advance the bookmark: last page = previous + pages read.
+                  Hidden while backdating - see `autoAdvance`. */}
+              {!backdating && (
+                <Card style={styles.toggleRow}>
+                  <View style={styles.grow}>
+                    <Text style={[Type.callout, styles.semibold, { color: c.foreground }]}>
+                      Continue from last page
+                    </Text>
+                    <Text style={[Type.footnote, { color: c.muted }]}>{autoNote}</Text>
+                  </View>
+                  <Switch
+                    value={autoPage}
+                    onValueChange={setAutoPage}
+                    accessibilityLabel="Continue from last page"
+                  />
+                </Card>
+              )}
+
+              {autoAdvance ? (
+                <View style={styles.locRow}>
+                  {finalLoc ? (
                     <>
                       <LocationPill
-                        text={`Juz ${readLoc.juz} · ${readLoc.surah.name}`}
-                        arabic={readLoc.surah.arabic}
+                        text={`Finished p.${finalLoc.page} · Juz ${finalLoc.juz} · ${finalLoc.surah.name}`}
+                        arabic={finalLoc.surah.arabic}
                       />
-                      <NextStartHint page={readLoc.page} maxPage={maxPage} />
+                      <NextStartHint page={finalLoc.page} maxPage={maxPage} />
                     </>
-                  ) : stoppedAt ? (
+                  ) : (
                     <Text style={[Type.footnote, { color: c.faint }]}>
-                      Enter a page from 1 to {maxPage}
+                      Enter pages read to set your bookmark
                     </Text>
-                  ) : null}
+                  )}
                 </View>
-              </View>
-            )}
+              ) : (
+                <View style={styles.manual}>
+                  <FieldLabel style={styles.labelTight}>
+                    {backdating
+                      ? "Last page you finished yesterday (optional)"
+                      : "Last page you finished (optional)"}
+                  </FieldLabel>
+                  <Input
+                    keyboardType="number-pad"
+                    placeholder={`1–${maxPage}`}
+                    value={stoppedAt}
+                    onChangeText={onStoppedChange}
+                    accessibilityLabel="Last page you finished"
+                    style={styles.lastPageInput}
+                  />
+                  <View style={styles.locRowTight}>
+                    {readLoc ? (
+                      <>
+                        <LocationPill
+                          text={`Juz ${readLoc.juz} · ${readLoc.surah.name}`}
+                          arabic={readLoc.surah.arabic}
+                        />
+                        <NextStartHint page={readLoc.page} maxPage={maxPage} />
+                      </>
+                    ) : stoppedAt ? (
+                      <Text style={[Type.footnote, { color: c.faint }]}>
+                        Enter a page from 1 to {maxPage}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
-      ) : sabak ? (
-        <>
-          <FieldLabel>What did you memorize?</FieldLabel>
-          <Card style={styles.wheelCard}>
-            <View style={styles.captions}>
-              <Text style={caption}>Juz</Text>
-              <Text style={caption}>Starts at</Text>
-              <Text style={caption}>Pages</Text>
-            </View>
-            <View style={styles.wheels}>
-              <View style={styles.col}>
-                <WheelPicker options={JUZ} value={juz} onChange={onJuzChange} ariaLabel="Juz" />
+        ) : sabak ? (
+          <>
+            <FieldLabel>What did you memorize?</FieldLabel>
+            <Card style={styles.wheelCard}>
+              <View style={styles.captions}>
+                <Text style={caption}>Juz</Text>
+                <Text style={caption}>Starts at</Text>
+                <Text style={caption}>Pages</Text>
               </View>
-              <View style={styles.col}>
-                <WheelPicker
-                  options={startOptions}
-                  value={startValue}
-                  onChange={(l) => setStart(startFromLabel(l))}
-                  ariaLabel="Starts at page of the juz"
-                />
-              </View>
-              <View style={styles.col}>
-                <WheelPicker
-                  options={SABAK_PAGES}
-                  value={pages}
-                  onChange={setPages}
-                  ariaLabel="Pages"
-                />
-              </View>
-            </View>
-          </Card>
-          <Text style={[Type.footnote, styles.summary, { color: c.accent }]}>{summary}</Text>
-          {showStartHint && <StartHint />}
-        </>
-      ) : (
-        <>
-          <FieldLabel>What are you {verb}?</FieldLabel>
-          <Card style={styles.wheelCard}>
-            <View style={styles.captions}>
-              <Text style={caption}>Juz</Text>
-              <Text style={caption}>Portion</Text>
-              {portion === "Pages" && <Text style={caption}>Starts at</Text>}
-              <Text style={caption}>{portion === "Pages" ? "Pages" : "Part"}</Text>
-            </View>
-            <View style={styles.wheels}>
-              <View style={styles.col}>
-                <WheelPicker options={JUZ} value={juz} onChange={onJuzChange} ariaLabel="Juz" />
-              </View>
-              <View style={styles.col}>
-                <WheelPicker
-                  options={PORTIONS}
-                  value={portion}
-                  onChange={(p) => {
-                    setPortion(p);
-                    setPart(1);
-                  }}
-                  ariaLabel="Portion"
-                />
-              </View>
-              {portion === "Pages" && (
+              <View style={styles.wheels}>
+                <View style={styles.col}>
+                  <WheelPicker options={JUZ} value={juz} onChange={onJuzChange} ariaLabel="Juz" />
+                </View>
                 <View style={styles.col}>
                   <WheelPicker
                     options={startOptions}
@@ -637,89 +584,140 @@ function LogForm({
                     ariaLabel="Starts at page of the juz"
                   />
                 </View>
-              )}
-              <View style={styles.col}>
-                {portion === "Full" ? (
-                  <View style={styles.fullPlaceholder}>
-                    <Text style={[Type.callout, { color: c.faint }]}>–</Text>
-                  </View>
-                ) : portion === "Pages" ? (
+                <View style={styles.col}>
                   <WheelPicker
-                    options={REV_PAGES}
+                    options={SABAK_PAGES}
                     value={pages}
                     onChange={setPages}
                     ariaLabel="Pages"
                   />
-                ) : (
-                  <WheelPicker
-                    options={partOptions}
-                    value={part}
-                    onChange={setPart}
-                    ariaLabel="Part"
-                  />
-                )}
+                </View>
               </View>
-            </View>
-          </Card>
-          <Text style={[Type.footnote, styles.summary, { color: c.accent }]}>{summary}</Text>
-          {showStartHint && <StartHint />}
-        </>
-      )}
-
-      {/* When - backdate a forgotten entry to yesterday (new entries only,
-          and only before 3 AM, so a missed day can't be patched later) */}
-      {!editing && canBackdate && (
-        <View style={styles.section}>
-          <SegmentedControl
-            segments={[
-              { value: "today", label: "Today" },
-              { value: "yesterday", label: "Yesterday" },
-            ]}
-            value={when}
-            onChange={setWhen}
-          />
-          {when === "yesterday" && (
-            <Text style={[Type.footnote, styles.hint, { color: c.faint }]}>
-              Read last night and forgot to log? This saves it for yesterday.
-              Open until 3 AM.
-            </Text>
-          )}
-        </View>
-      )}
-
-      {/* Notes - collapsed by default */}
-      <View style={styles.section}>
-        {showNotes ? (
-          <>
-            <FieldLabel>Notes</FieldLabel>
-            <Textarea
-              placeholder="After Fajr, felt smooth…"
-              value={notes}
-              onChangeText={setNotes}
-              // Focus when revealed by the "Add a note" tap; an entry opened
-              // with notes already shows them without raising the keyboard.
-              autoFocus={!init.showNotes}
-            />
+            </Card>
+            <Text style={[Type.footnote, styles.summary, { color: c.accent }]}>{summary}</Text>
+            {showStartHint && <StartHint />}
           </>
         ) : (
-          <Pressable
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={() => setShowNotes(true)}
-            style={styles.addNote}
-          >
-            <Plus size={16} color={c.accent} strokeWidth={2.5} />
-            <Text style={[Type.subhead, { color: c.accent }]}>Add a note</Text>
-          </Pressable>
+          <>
+            <FieldLabel>What are you {verb}?</FieldLabel>
+            <Card style={styles.wheelCard}>
+              <View style={styles.captions}>
+                <Text style={caption}>Juz</Text>
+                <Text style={caption}>Portion</Text>
+                {portion === "Pages" && <Text style={caption}>Starts at</Text>}
+                <Text style={caption}>{portion === "Pages" ? "Pages" : "Part"}</Text>
+              </View>
+              <View style={styles.wheels}>
+                <View style={styles.col}>
+                  <WheelPicker options={JUZ} value={juz} onChange={onJuzChange} ariaLabel="Juz" />
+                </View>
+                <View style={styles.col}>
+                  <WheelPicker
+                    options={PORTIONS}
+                    value={portion}
+                    onChange={(p) => {
+                      setPortion(p);
+                      setPart(1);
+                    }}
+                    ariaLabel="Portion"
+                  />
+                </View>
+                {portion === "Pages" && (
+                  <View style={styles.col}>
+                    <WheelPicker
+                      options={startOptions}
+                      value={startValue}
+                      onChange={(l) => setStart(startFromLabel(l))}
+                      ariaLabel="Starts at page of the juz"
+                    />
+                  </View>
+                )}
+                <View style={styles.col}>
+                  {portion === "Full" ? (
+                    <View style={styles.fullPlaceholder}>
+                      <Text style={[Type.callout, { color: c.faint }]}>–</Text>
+                    </View>
+                  ) : portion === "Pages" ? (
+                    <WheelPicker
+                      options={REV_PAGES}
+                      value={pages}
+                      onChange={setPages}
+                      ariaLabel="Pages"
+                    />
+                  ) : (
+                    <WheelPicker
+                      options={partOptions}
+                      value={part}
+                      onChange={setPart}
+                      ariaLabel="Part"
+                    />
+                  )}
+                </View>
+              </View>
+            </Card>
+            <Text style={[Type.footnote, styles.summary, { color: c.accent }]}>{summary}</Text>
+            {showStartHint && <StartHint />}
+          </>
         )}
+
+        {/* When - backdate a forgotten entry to yesterday (new entries only,
+            and only before 3 AM, so a missed day can't be patched later) */}
+        {!editing && canBackdate && (
+          <View style={styles.section}>
+            <SegmentedControl
+              segments={[
+                { value: "today", label: "Today" },
+                { value: "yesterday", label: "Yesterday" },
+              ]}
+              value={when}
+              onChange={setWhen}
+            />
+            {when === "yesterday" && (
+              <Text style={[Type.footnote, styles.hint, { color: c.faint }]}>
+                Read last night and forgot to log? This saves it for yesterday.
+                Open until 3 AM.
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Notes - collapsed by default */}
+        <View style={styles.section}>
+          {showNotes ? (
+            <>
+              <FieldLabel>Notes</FieldLabel>
+              <Textarea
+                placeholder="After Fajr, felt smooth…"
+                value={notes}
+                onChangeText={setNotes}
+                // Focus when revealed by the "Add a note" tap; an entry opened
+                // with notes already shows them without raising the keyboard.
+                autoFocus={!init.showNotes}
+              />
+            </>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={() => setShowNotes(true)}
+              style={styles.addNote}
+            >
+              <Plus size={16} color={c.accent} strokeWidth={2.5} />
+              <Text style={[Type.subhead, { color: c.accent }]}>Add a note</Text>
+            </Pressable>
+          )}
+        </View>
+      </SheetScroll>
+
+      {/* Pinned under the scroll so Save (and why it failed) stays on screen
+          when the keyboard leaves the form too little room. */}
+      <View style={styles.footer}>
+        {error && <Text style={[Type.footnote, styles.error, { color: c.danger }]}>{error}</Text>}
+        <Button fullWidth style={styles.save} onPress={save}>
+          {editing ? "Save changes" : "Save entry"}
+        </Button>
       </View>
-
-      {error && <Text style={[Type.footnote, styles.error, { color: c.danger }]}>{error}</Text>}
-
-      <Button fullWidth style={styles.save} onPress={save}>
-        {editing ? "Save changes" : "Save entry"}
-      </Button>
-    </View>
+    </>
   );
 }
 
@@ -760,8 +758,8 @@ function StartHint() {
 }
 
 const styles = StyleSheet.create({
-  kav: { flexShrink: 1 },
   content: { paddingHorizontal: 20, paddingTop: 8 },
+  footer: { paddingHorizontal: 20 },
   header: {
     flexDirection: "row",
     alignItems: "center",
