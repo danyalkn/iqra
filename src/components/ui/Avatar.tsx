@@ -10,10 +10,11 @@ import {
 
 import { useTheme } from "@/hooks/use-theme";
 
-/** First letters of the first and last words. Words are runs of letters or
- *  digits, so "Aisha (demo)" gives "AD", not the web's "A(". */
+/** First letters of the first and last words. Words are runs of letters,
+ *  combining marks or digits, so "Aisha (demo)" gives "AD", not the web's
+ *  "A(", and the vowel marks in "عَلِي حَسَن" stay inside their words. */
 function initialsFrom(name: string): string {
-  const [first, ...rest] = name.match(/[\p{L}\p{N}]+/gu) ?? [];
+  const [first, ...rest] = name.match(/[\p{L}\p{M}\p{N}]+/gu) ?? [];
   if (!first) return "?";
   const last = rest.at(-1);
   // Array.from splits by code point, so a letter outside the BMP stays whole.
