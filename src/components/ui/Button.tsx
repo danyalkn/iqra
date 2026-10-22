@@ -53,6 +53,11 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
+      // RN Android rebuilds the description from label + states and never
+      // clears an empty one, so a button with no label kept reading "busy"
+      // after its first save. A text button labels itself; a caller's own
+      // accessibilityLabel (in rest) still wins.
+      accessibilityLabel={typeof children === "string" ? children : undefined}
       accessibilityState={{ disabled: !!inactive, busy: loading }}
       disabled={inactive}
       style={({ pressed }) => [
