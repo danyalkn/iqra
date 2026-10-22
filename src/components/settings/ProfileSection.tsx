@@ -134,9 +134,14 @@ export function ProfileSection() {
                 <Text style={[Type.caption, { color: c.muted }]}>{mushafLabel}</Text>
               </View>
             </View>
-            <Text style={[Type.footnote, styles.types, { color: c.faint }]}>
-              {TYPES_BY_MODE[currentMode].map((t) => ENTRY_META[t].label).join(" · ")}
-            </Text>
+            {/* The entry types a mode logs. Reading mode logs only Reading,
+                which the pill above already says, so the line would just
+                repeat it. */}
+            {TYPES_BY_MODE[currentMode].length > 1 && (
+              <Text style={[Type.footnote, styles.types, { color: c.faint }]}>
+                {TYPES_BY_MODE[currentMode].map((t) => ENTRY_META[t].label).join(" · ")}
+              </Text>
+            )}
           </Card>
         )}
       </Pressable>
