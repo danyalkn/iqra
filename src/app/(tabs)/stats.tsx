@@ -931,14 +931,22 @@ export default function StatsScreen() {
                       sub={`≈ ${Math.round(totals.myAll / 20)} juz`}
                       onInfo={() => setShowCoverage(true)}
                     />
-                    <StatTile label="Current streak" value={streak} sub="days" />
+                    <StatTile
+                      label="Current streak"
+                      value={streak}
+                      sub={streak === 1 ? "day" : "days"}
+                    />
                   </View>
                   <View style={styles.tileRow}>
-                    <StatTile label="Longest streak" value={longest} sub="days" />
+                    <StatTile
+                      label="Longest streak"
+                      value={longest}
+                      sub={longest === 1 ? "day" : "days"}
+                    />
                     <StatTile
                       label="This week"
                       value={weekCount}
-                      sub={`entries · since ${shortDate(thisWeekDates[0])}`}
+                      sub={`${weekCount === 1 ? "entry" : "entries"} · since ${shortDate(thisWeekDates[0])}`}
                     />
                   </View>
                 </>
@@ -965,7 +973,7 @@ export default function StatsScreen() {
                     <StatTile
                       label="This week"
                       value={weekCount}
-                      sub={`entries · since ${shortDate(thisWeekDates[0])}`}
+                      sub={`${weekCount === 1 ? "entry" : "entries"} · since ${shortDate(thisWeekDates[0])}`}
                     />
                     <StatTile label="Khatmahs" value={khatmahs} sub="completed together" />
                   </View>
