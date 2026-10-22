@@ -70,7 +70,8 @@ export function RemindersManager({ userId }: { userId: string }) {
           accessibilityRole="button"
           accessibilityLabel="Add reminder"
           onPress={() => openSheet(null)}
-          hitSlop={8}
+          // The 20 pt "+ Add" link gets a ~44 pt touch area.
+          hitSlop={12}
           style={({ pressed }) => [styles.add, pressed && styles.pressed]}
         >
           <Plus size={16} color={c.accent} strokeWidth={2.5} />

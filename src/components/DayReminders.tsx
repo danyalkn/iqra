@@ -569,6 +569,7 @@ export function DayReminderSheet({
             ) : (
               <Pressable
                 accessibilityRole="button"
+                hitSlop={12}
                 onPress={() => setShowNote(true)}
                 style={({ pressed }) => [styles.noteLink, pressed && styles.pressed]}
               >

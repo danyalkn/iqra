@@ -192,7 +192,7 @@ export default function LoginScreen() {
             accessibilityRole="button"
             accessibilityLabel={showPw ? "Hide password" : "Show password"}
             onPress={() => setShowPw((v) => !v)}
-            hitSlop={8}
+            hitSlop={12}
             style={styles.eye}
           >
             {showPw ? <EyeOff size={20} color={c.faint} /> : <Eye size={20} color={c.faint} />}

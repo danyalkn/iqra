@@ -41,6 +41,10 @@ const MODE_SEGMENTS: { value: Mode; label: string }[] = [
  * Today's date math and the reminder cron, so a bad zone crashes the tab and
  * aborts the cron run for the whole circle.
  */
+
+/** The footnote links under the time zone are 18 pt tall: grow the touch
+ *  area to about 44 without moving them (8 sideways keeps the two apart). */
+const LINK_SLOP = { top: 13, bottom: 13, left: 8, right: 8 };
 export function ProfileSection() {
   const c = useTheme();
   const { user, profile, refreshProfile } = useSession();
@@ -175,6 +179,7 @@ export function ProfileSection() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityHint="Opens the time zone picker"
+                  hitSlop={LINK_SLOP}
                   onPress={() => setTzOpen(true)}
                 >
                   <Text style={[Type.footnote, styles.medium, { color: c.accent }]}>
@@ -182,7 +187,11 @@ export function ProfileSection() {
                   </Text>
                 </Pressable>
                 {detected !== timezone && (
-                  <Pressable accessibilityRole="button" onPress={() => setTimezone(detected)}>
+                  <Pressable
+                    accessibilityRole="button"
+                    hitSlop={LINK_SLOP}
+                    onPress={() => setTimezone(detected)}
+                  >
                     <Text style={[Type.footnote, styles.medium, { color: c.accent }]}>
                       Use detected ({detected})
                     </Text>
