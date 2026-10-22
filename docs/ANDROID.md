@@ -107,10 +107,21 @@ only matters if it fails.
 
 ### Agent steps
 
-1. `google-services.json` at the repo root, committed. The Expo docs say
-   it holds only public identifiers, and the repo is public; that is
-   acceptable. Add a `.gitignore` line for the service account key
-   pattern (`*firebase-adminsdk*.json`) in case it lands in the folder.
+1. `google-services.json` at the repo root. **Changed 2026-10-22: it is
+   no longer committed.** GitHub secret scanning flagged its API key as
+   soon as main reached the public repo, so the file is ignored, EAS
+   builds read it from the secret file variable `GOOGLE_SERVICES_JSON`
+   (all three environments, via `app.config.js`), and local builds use
+   the untracked copy. The key itself (it also ships in every APK) gets
+   restricted in Google Cloud (owner step, asked for 2026-10-22) to the
+   app (package
+   `com.qadamtechnologies.iqra`, EAS keystore SHA-1
+   `94:4F:74:30:81:70:E1:4A:27:05:E4:DC:C2:CD:81:E1:8F:FA:4E:DD`) and to
+   the Firebase Installations, FCM Registration and Firebase Cloud
+   Messaging APIs. A new google-services.json goes to EAS with
+   `npx eas-cli@latest env:set --name GOOGLE_SERVICES_JSON --type file --value ./google-services.json --visibility secret --environment production --environment preview --environment development --non-interactive`,
+   never into git. The `.gitignore` also covers the service account key
+   pattern (`*firebase-adminsdk*.json`).
 2. app.json: `android.googleServicesFile: "./google-services.json"` and
    `android.version: "1.1.0"` (see Versioning). Run `npx expo-doctor`.
 3. Build the APK (see "Build and ship" below), install it on an
