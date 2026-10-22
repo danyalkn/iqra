@@ -64,6 +64,18 @@ export function FeedCardView({
                 {pagesPhrase(card.pages)}
               </Text>
             )}
+            {/* On the title line, not beside the whole card as on the web: a
+                column there narrowed the detail line too and cut my own
+                rows' surah short ("Juz 1 · Al-B…"). */}
+            {single && isMe && (
+              <View style={[styles.inlineDelete, card.pages > 0 ? null : styles.pushRight]}>
+                <DeleteButton
+                  id={only.id}
+                  confirming={confirming === only.id}
+                  onPress={() => onDelete(only.id)}
+                />
+              </View>
+            )}
           </View>
           <View style={styles.lines}>
             {card.lines.map((line) => (
@@ -97,13 +109,6 @@ export function FeedCardView({
             </Pressable>
           )}
         </View>
-        {single && isMe && (
-          <DeleteButton
-            id={only.id}
-            confirming={confirming === only.id}
-            onPress={() => onDelete(only.id)}
-          />
-        )}
       </View>
 
       {!single && expanded && (
@@ -155,6 +160,10 @@ const styles = StyleSheet.create({
   name: { fontWeight: "600", flexShrink: 1 },
   time: { flexShrink: 0, fontVariant: ["tabular-nums"] },
   pages: { marginLeft: "auto", flexShrink: 0, fontWeight: "500", fontVariant: ["tabular-nums"] },
+  // Centred on the title line and taking none of its height: the 32 pt
+  // button overhangs the 22 pt line by 5 above and below.
+  inlineDelete: { alignSelf: "center", marginVertical: -8 },
+  pushRight: { marginLeft: "auto" },
   // Web: mt-1.5 space-y-1.
   lines: { marginTop: 6, gap: 4 },
   line: { flexDirection: "row", alignItems: "center", gap: 8 },
