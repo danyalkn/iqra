@@ -162,15 +162,6 @@ function zoneDetail(tz: string, now: Date): string | null {
   }
 }
 
-/**
- * Height of the strip the software keyboard covers at the bottom of the
- * window, 0 when hidden. Used instead of KeyboardAvoidingView: inside a Sheet
- * the KAV measures its frame relative to the panel but compares it with the
- * keyboard's screen Y, so its padding is wrong and, on a content-sized view,
- * grows on every layout pass; on Android `behavior` is undefined (a plain
- * View) and the edge-to-edge Modal window ignores adjustResize, so nothing
- * moves at all. A measured height is right in both coordinate systems.
- */
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -234,7 +225,7 @@ export function TimezonePicker({ open, onClose, value, onChange }: Props) {
 
   return (
     <Sheet open={open} onClose={close} dragAnywhere={false}>
-      {/* The Sheet lifts itself above the keyboard; flexShrink on the wrapper
+      {/* The Sheet stays above the keyboard; flexShrink on the wrapper
           and the list lets the Sheet's cap take height from the list, so its
           scroll end stays reachable instead of being clipped. */}
       <View style={styles.shrink}>

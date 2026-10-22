@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import {
-  KeyboardAvoidingView,
+  Keyboard,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
+  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -13,6 +13,7 @@ import {
   GestureHandlerRootView,
   usePanGesture,
 } from "react-native-gesture-handler";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -25,6 +26,8 @@ import { scheduleOnRN } from "react-native-worklets";
 import { Elevation, Radius, SCRIM } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
+import { focusedInputWithin } from "./focus";
+
 const OPEN_MS = 300;
 /** Exit slide; exported so callers can wait for the Modal to leave (Today
  *  starts the celebration after it, as the web layered it above the sheet). */
@@ -32,6 +35,8 @@ export const CLOSE_MS = 220;
 /** Drag past this (points) or faster than this (points/s) dismisses. */
 const DISMISS_DISTANCE = 120;
 const DISMISS_VELOCITY = 900;
+/** Space between the sheet's last row and the top of the open keyboard. */
+const KEYBOARD_GAP = 8;
 
 /**
  * Bottom sheet, ported from reference/web-pwa/components/ui/Sheet.tsx:
@@ -42,14 +47,18 @@ const DISMISS_VELOCITY = 900;
  * Pass false when the content is a ScrollView so the two gestures do not
  * fight; the grab handle strip always dismisses.
  *
- * Keyboard: the sheet lifts itself above the keyboard. RN's
- * KeyboardAvoidingView measures its own frame against the keyboard's window
- * coordinates, so it only works where the frame spans the window: here, at
- * the Modal root, not inside the bottom-anchored panel. Content must not add
- * its own KeyboardAvoidingView (it would double-pad); a ScrollView child
- * shrinks and scrolls because panel and panelInner both flexShrink. The root
- * also pads its top by the safe-area inset (+8) so the panel can never rise
- * into the status bar, in addition to the 92% cap.
+ * Keyboard: the panel stays on the window bottom and pads its content up
+ * by keyboard-controller's keyboard height, frame by frame with the
+ * keyboard's own animation, so the sheet's paper runs on behind the keys
+ * (iOS 26's keyboard is translucent; a lifted panel showed the screen
+ * under the sheet through it). RN's KeyboardAvoidingView lifted the sheet
+ * on iOS only: keyboard-controller sets every Modal window on Android to
+ * adjustNothing and reports the keyboard itself, so there a sheet never
+ * moved and the keyboard covered its Save button (build 6, 2026-10-21).
+ * Content must not add its own keyboard avoidance (it would double-pad); a
+ * ScrollView child shrinks and scrolls because panel and panelInner both
+ * flexShrink. The root also pads its top by the safe-area inset (+8) so the
+ * panel can never rise into the status bar, in addition to the 92% cap.
  */
 export function Sheet({
   open,
@@ -76,14 +85,24 @@ export function Sheet({
     if (!open) setClosing(true);
   }
   const render = open || closing;
+  const bottomPad = Math.max(28, insets.bottom);
+  // Negative while the keyboard is up, measured from the window bottom.
+  const { height: keyboardH } = useReanimatedKeyboardAnimation();
   const translateY = useSharedValue(windowH);
   const backdrop = useSharedValue(0);
   const panelH = useSharedValue(windowH);
+  const rootRef = useRef<ComponentRef<typeof View>>(null);
 
   // The web waited a frame before sliding in so the transition ran; here the
   // Modal mounts, then the values animate from off-screen.
   useEffect(() => {
     if (open) {
+      // A field focused under the sheet (Chat's composer, onboarding's name)
+      // would keep its keyboard up over the sheet: drop it. A field of the
+      // sheet's own that focuses on open is left alone.
+      if (TextInput.State.currentlyFocusedInput() && !focusedInputWithin(rootRef.current)) {
+        Keyboard.dismiss();
+      }
       translateY.set(windowH);
       backdrop.set(0);
       translateY.set(withTiming(0, { duration: OPEN_MS, easing: Easing.out(Easing.cubic) }));
@@ -91,6 +110,8 @@ export function Sheet({
       return;
     }
     if (!closing) return;
+    // Lower the keyboard with the sheet rather than after the Modal is gone.
+    if (focusedInputWithin(rootRef.current)) Keyboard.dismiss();
     backdrop.set(withTiming(0, { duration: CLOSE_MS }));
     translateY.set(
       withTiming(panelH.get(), { duration: CLOSE_MS, easing: Easing.in(Easing.cubic) }),
@@ -114,8 +135,7 @@ export function Sheet({
     },
     onDeactivate: (e) => {
       "worklet";
-      const shouldClose =
-        e.translationY > DISMISS_DISTANCE || e.velocityY > DISMISS_VELOCITY;
+      const shouldClose = e.translationY > DISMISS_DISTANCE || e.velocityY > DISMISS_VELOCITY;
       if (shouldClose) {
         scheduleOnRN(requestClose);
       } else {
@@ -129,6 +149,11 @@ export function Sheet({
     transform: [{ translateY: translateY.get() }],
   }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdrop.get() }));
+  // Home-indicator room while the keyboard is down; the keyboard's height
+  // plus a small gap while it is up (it already covers the indicator).
+  const innerStyle = useAnimatedStyle(() => ({
+    paddingBottom: Math.max(bottomPad, -keyboardH.get() + KEYBOARD_GAP),
+  }));
 
   if (!render) return null;
 
@@ -153,15 +178,10 @@ export function Sheet({
     >
       {/* Rounded clip lives on an inner view: overflow hidden on the shadow
           view would clip the iOS shadow. */}
-      <View
-        style={[
-          styles.panelInner,
-          { backgroundColor: c.canvas, paddingBottom: Math.max(28, insets.bottom) },
-        ]}
-      >
+      <Animated.View style={[styles.panelInner, { backgroundColor: c.canvas }, innerStyle]}>
         {dragAnywhere ? handle : <GestureDetector gesture={pan}>{handle}</GestureDetector>}
         {children}
-      </View>
+      </Animated.View>
     </Animated.View>
   );
 
@@ -177,27 +197,21 @@ export function Sheet({
       {/* Modal is a separate native root on Android, so it needs its own
           gesture root for the pan to be recognized. */}
       <GestureHandlerRootView style={styles.fill}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          // The panel's own bottom padding (home indicator) doubles as the
-          // gap above the keyboard instead of leaving an empty band.
-          keyboardVerticalOffset={Platform.OS === "ios" ? -Math.max(28, insets.bottom) : 0}
-          // Top padding keeps a tall panel (keyboard up) below the status bar /
-          // Dynamic Island. It only shrinks the room flexShrink works with:
-          // the open and drag animations translate the panel, not this root,
-          // and the backdrop is absolutely positioned so it still covers all.
-          style={[styles.root, { paddingTop: insets.top + 8 }]}
-        >
-        <Animated.View style={[styles.backdrop, backdropStyle]}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-            style={styles.fill}
-            onPress={requestClose}
-          />
-        </Animated.View>
-        {dragAnywhere ? <GestureDetector gesture={pan}>{panel}</GestureDetector> : panel}
-        </KeyboardAvoidingView>
+        {/* Top padding keeps a tall panel (keyboard up) below the status bar /
+            Dynamic Island. It only caps the room flexShrink works with: the
+            open and drag animations translate the panel, not this root, and
+            the backdrop is absolutely positioned so it still covers all. */}
+        <View ref={rootRef} style={[styles.root, { paddingTop: insets.top + 8 }]}>
+          <Animated.View style={[styles.backdrop, backdropStyle]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              style={styles.fill}
+              onPress={requestClose}
+            />
+          </Animated.View>
+          {dragAnywhere ? <GestureDetector gesture={pan}>{panel}</GestureDetector> : panel}
+        </View>
       </GestureHandlerRootView>
     </Modal>
   );
