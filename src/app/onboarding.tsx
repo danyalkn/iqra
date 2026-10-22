@@ -98,60 +98,64 @@ export default function OnboardingScreen() {
     // keyboard-controller's scroll view on both platforms: RN's
     // KeyboardAvoidingView only moved on iOS (the Android window never
     // resizes under KeyboardProvider), so the name field's keyboard left
-    // Continue unreachable there.
-    <KeyboardAwareScrollView
-      style={[styles.root, { backgroundColor: c.canvas }]}
-      contentContainerStyle={[
-        styles.content,
-        { paddingTop: insets.top + 56, paddingBottom: insets.bottom + 40 },
-      ]}
-      keyboardShouldPersistTaps="handled"
-      bottomOffset={24}
-    >
-      {/* progress */}
-      <Text style={[Type.footnote, styles.caption, { color: c.faint }]}>
-        Step {step + 1} of 2
-      </Text>
-
-      {step === 0 && (
-        <>
-          <ModeStep mode={mode} onChange={setMode} />
-          <View style={styles.actions}>
-            <Button fullWidth disabled={!mode} onPress={() => setStep(1)}>
-              Continue
-            </Button>
-          </View>
-        </>
-      )}
-
-      {step === 1 && (
-        <>
-          <ProfileStep draft={draft} onChange={patch} />
-          {error && (
-            <Text style={[Type.footnote, styles.error, { color: c.danger }]}>{error}</Text>
-          )}
-          <View style={[styles.actions, styles.actionRow]}>
-            <Button variant="secondary" disabled={saving} onPress={() => setStep(0)}>
-              Back
-            </Button>
-            <Button fullWidth loading={saving} onPress={saveProfile} style={styles.grow}>
-              Continue
-            </Button>
-          </View>
-        </>
-      )}
-
-      {/* Escape hatch for a wrong account (kept from the Phase 0 stub). */}
-      <Button
-        variant="ghost"
-        size="md"
-        disabled={saving}
-        onPress={() => void signOut()}
-        style={styles.signOut}
+    // Continue unreachable there. The root pads the status bar and the
+    // scroll sits below it, so a form scrolled up for the keyboard never
+    // runs under the clock.
+    <View style={[styles.root, { paddingTop: insets.top, backgroundColor: c.canvas }]}>
+      <KeyboardAwareScrollView
+        style={styles.root}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: 56, paddingBottom: insets.bottom + 40 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
       >
-        Sign out
-      </Button>
-    </KeyboardAwareScrollView>
+        {/* progress */}
+        <Text style={[Type.footnote, styles.caption, { color: c.faint }]}>
+          Step {step + 1} of 2
+        </Text>
+
+        {step === 0 && (
+          <>
+            <ModeStep mode={mode} onChange={setMode} />
+            <View style={styles.actions}>
+              <Button fullWidth disabled={!mode} onPress={() => setStep(1)}>
+                Continue
+              </Button>
+            </View>
+          </>
+        )}
+
+        {step === 1 && (
+          <>
+            <ProfileStep draft={draft} onChange={patch} />
+            {error && (
+              <Text style={[Type.footnote, styles.error, { color: c.danger }]}>{error}</Text>
+            )}
+            <View style={[styles.actions, styles.actionRow]}>
+              <Button variant="secondary" disabled={saving} onPress={() => setStep(0)}>
+                Back
+              </Button>
+              <Button fullWidth loading={saving} onPress={saveProfile} style={styles.grow}>
+                Continue
+              </Button>
+            </View>
+          </>
+        )}
+
+        {/* Escape hatch for a wrong account (kept from the Phase 0 stub). */}
+        <Button
+          variant="ghost"
+          size="md"
+          disabled={saving}
+          onPress={() => void signOut()}
+          style={styles.signOut}
+        >
+          Sign out
+        </Button>
+      </KeyboardAwareScrollView>
+    </View>
   );
 }
 
