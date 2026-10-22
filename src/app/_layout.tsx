@@ -12,6 +12,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { WindowInsetsProvider } from "@/hooks/use-window-insets";
 import { useTheme } from "@/hooks/use-theme";
 import { SyncController } from "@/data/SyncController";
 import { FocusController } from "@/focus/FocusController";
@@ -40,26 +41,30 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
-      {/* Keyboard frames for Chat (react-native-keyboard-controller). The
-          provider must sit above every screen; native module, so a dev-client
-          rebuild is needed after it is added. */}
-      <KeyboardProvider>
-        <ThemeProvider>
-          <SessionProvider>
-            <SplashController />
-            {/* Push: foreground handler, tap routing through the gate,
-                token self-heal. Needs useSession, so it sits here. */}
-            <PushController />
-            {/* Offline outbox: sends queued entries when the app comes
-                back and on a backoff timer while any wait. */}
-            <SyncController />
-            {/* Focus: keeps the Screen Time shield in step with "logged
-                today" on foreground and at midnight (iOS only). */}
-            <FocusController />
-            <RootNavigator />
-          </SessionProvider>
-        </ThemeProvider>
-      </KeyboardProvider>
+      {/* The window's own insets for full-window Modals (useWindowInsets):
+          read here, above every screen's SafeAreaProvider. */}
+      <WindowInsetsProvider>
+        {/* Keyboard frames for Chat (react-native-keyboard-controller). The
+            provider must sit above every screen; native module, so a dev-client
+            rebuild is needed after it is added. */}
+        <KeyboardProvider>
+          <ThemeProvider>
+            <SessionProvider>
+              <SplashController />
+              {/* Push: foreground handler, tap routing through the gate,
+                  token self-heal. Needs useSession, so it sits here. */}
+              <PushController />
+              {/* Offline outbox: sends queued entries when the app comes
+                  back and on a backoff timer while any wait. */}
+              <SyncController />
+              {/* Focus: keeps the Screen Time shield in step with "logged
+                  today" on foreground and at midnight (iOS only). */}
+              <FocusController />
+              <RootNavigator />
+            </SessionProvider>
+          </ThemeProvider>
+        </KeyboardProvider>
+      </WindowInsetsProvider>
     </GestureHandlerRootView>
   );
 }
