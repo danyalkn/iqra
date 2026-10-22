@@ -8,10 +8,10 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Elevation, Radius, Type } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
+import { useWindowInsets } from "@/hooks/use-window-insets";
 
 import { QUICK_EMOJI } from "./shared";
 
@@ -62,7 +62,7 @@ export function ActionOverlay({
 }) {
   const c = useTheme();
   const { width: vw, height: windowH } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
+  const insets = useWindowInsets();
   const reduceMotion = useReducedMotion();
   // The overlay's real height and the menu's (font size changes both).
   const [frameH, setFrameH] = useState(windowH);

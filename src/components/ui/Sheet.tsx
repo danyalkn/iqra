@@ -20,11 +20,11 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 
 import { Elevation, Radius, SCRIM } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
+import { useWindowInsets } from "@/hooks/use-window-insets";
 
 import { focusedInputWithin } from "./focus";
 
@@ -72,7 +72,7 @@ export function Sheet({
   dragAnywhere?: boolean;
 }) {
   const c = useTheme();
-  const insets = useSafeAreaInsets();
+  const insets = useWindowInsets();
   const { height: windowH } = useWindowDimensions();
   // `render` = open or mid-exit. The previous-open value is adjusted during
   // render (the React-sanctioned way to react to a prop flip) so the exit

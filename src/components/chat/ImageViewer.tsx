@@ -3,9 +3,9 @@ import { StatusBar } from "expo-status-bar";
 import { X } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Keyboard, Modal, Pressable, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useWindowInsets } from "@/hooks/use-window-insets";
 
 /**
  * A picture from the chat, full screen on black: tap anywhere or the X to
@@ -25,7 +25,7 @@ export function ImageViewer({
   source: ImageSource | null;
   onClose: () => void;
 }) {
-  const insets = useSafeAreaInsets();
+  const insets = useWindowInsets();
   const scheme = useColorScheme();
   const open = !!source;
   const [shown, setShown] = useState(false);
