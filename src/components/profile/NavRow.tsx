@@ -45,7 +45,9 @@ export function NavRow({
       </View>
       <View style={styles.text}>
         <Text style={[Type.body, styles.title, { color: c.foreground }]}>{title}</Text>
-        <Text style={[Type.footnote, { color: c.muted }]} numberOfLines={1}>
+        {/* Two lines, not one: the Journal row's note was cut at "with your
+            not…" at the default text size. */}
+        <Text style={[Type.footnote, { color: c.muted }]} numberOfLines={2}>
           {note}
         </Text>
       </View>
