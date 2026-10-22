@@ -48,6 +48,7 @@ export function useRevealFocused() {
 export function SheetScroll({
   style,
   onScroll,
+  onContentSizeChange,
   keyboardShouldPersistTaps = "handled",
   showsVerticalScrollIndicator = false,
   children,
@@ -55,6 +56,7 @@ export function SheetScroll({
 }: Omit<ScrollViewProps, "ref">) {
   const ref = useRef<ComponentRef<typeof ScrollView>>(null);
   const offset = useRef(0);
+  const contentH = useRef(0);
 
   const reveal = useCallback(() => {
     const scroll = ref.current;
@@ -73,7 +75,13 @@ export function SheetScroll({
         const delta = below > 0 ? Math.min(below, above) : above < 0 ? above : 0;
         // The sheet may have closed while the measures were in flight.
         if (Math.abs(delta) < 1 || ref.current !== scroll) return;
-        scroll.scrollTo({ y: Math.max(0, offset.current + delta), animated: true });
+        // Clamped to the end of the content: iOS's scrollTo does not clamp,
+        // so the margin under the last field (Log's notes) scrolled 16 pt
+        // past the end and jumped back on the next drag. The content reaches
+        // at least the field's bottom, in case its size report is late.
+        const fieldEnd = offset.current + iy - sy + ih;
+        const max = Math.max(0, Math.max(contentH.current, fieldEnd) - sh);
+        scroll.scrollTo({ y: Math.min(max, Math.max(0, offset.current + delta)), animated: true });
       });
     });
   }, []);
@@ -93,6 +101,14 @@ export function SheetScroll({
     [revealSoon],
   );
 
+  const handleContentSize = useCallback(
+    (w: number, h: number) => {
+      contentH.current = h;
+      onContentSizeChange?.(w, h);
+    },
+    [onContentSizeChange],
+  );
+
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       offset.current = e.nativeEvent.contentOffset.y;
@@ -110,6 +126,7 @@ export function SheetScroll({
         showsVerticalScrollIndicator={showsVerticalScrollIndicator}
         scrollEventThrottle={16}
         onScroll={handleScroll}
+        onContentSizeChange={handleContentSize}
         {...rest}
       >
         {children}
