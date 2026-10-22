@@ -475,20 +475,23 @@ export function DayReminderSheet({
     <Sheet open={open} onClose={onClose} dragAnywhere={false}>
         {/* The Sheet stays above the keyboard; this shrinks and scrolls to
             the focused field. */}
+        {/* The title row stays put above the scroll, so a note's keyboard can
+            never scroll the title or Close half away. */}
+        <View style={[styles.sheetHeader, styles.pinned]}>
+          <Text accessibilityRole="header" style={[Type.title2, { color: c.foreground }]}>
+            Remind me
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            hitSlop={8}
+            onPress={onClose}
+            style={[styles.closeBtn, { backgroundColor: c.surface2 }]}
+          >
+            <X size={16} color={c.muted} />
+          </Pressable>
+        </View>
         <SheetScroll contentContainerStyle={styles.sheetBody}>
-          <View style={styles.sheetHeader}>
-            <Text accessibilityRole="header" style={[Type.title2, { color: c.foreground }]}>
-              Remind me
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-              onPress={onClose}
-              style={[styles.closeBtn, { backgroundColor: c.surface2 }]}
-            >
-              <X size={16} color={c.muted} />
-            </Pressable>
-          </View>
           <Text style={[Type.footnote, styles.sheetLede, { color: c.muted }]}>
             A one-time nudge. Your daily reminders live in Settings.
           </Text>
@@ -645,7 +648,8 @@ const styles = StyleSheet.create({
   },
   sectionError: { marginTop: 8, paddingHorizontal: 4 },
   // Sheet
-  sheetBody: { paddingHorizontal: 20, paddingTop: 8 },
+  pinned: { paddingHorizontal: 20, paddingTop: 8 },
+  sheetBody: { paddingHorizontal: 20 },
   sheetHeader: {
     flexDirection: "row",
     alignItems: "center",

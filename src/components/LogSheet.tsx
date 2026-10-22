@@ -474,21 +474,23 @@ function LogForm({
           keeps it above the keyboard and lets this shrink and scroll (to the
           focused field) instead of being clipped. The grab handle still
           dismisses. */}
+      {/* The title row stays put above the scroll, so the keyboard can never
+          scroll the name of the sheet or its Close button half away. */}
+      <View style={[styles.header, styles.pinned]}>
+        <Text accessibilityRole="header" style={[Type.title2, { color: c.foreground }]}>
+          {editing ? "Edit" : "Log"} {meta.label}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          hitSlop={8}
+          onPress={onClose}
+          style={[styles.closeBtn, { backgroundColor: c.surface2 }]}
+        >
+          <X size={16} color={c.muted} />
+        </Pressable>
+      </View>
       <SheetScroll bounces={false} contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text accessibilityRole="header" style={[Type.title2, { color: c.foreground }]}>
-            {editing ? "Edit" : "Log"} {meta.label}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-            hitSlop={8}
-            onPress={onClose}
-            style={[styles.closeBtn, { backgroundColor: c.surface2 }]}
-          >
-            <X size={16} color={c.muted} />
-          </Pressable>
-        </View>
         <Text style={[Type.footnote, styles.desc, { color: c.muted }]}>{meta.desc}</Text>
 
         {reading ? (
@@ -772,7 +774,8 @@ function StartHint() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 20, paddingTop: 8 },
+  pinned: { paddingHorizontal: 20, paddingTop: 8 },
+  content: { paddingHorizontal: 20 },
   header: {
     flexDirection: "row",
     alignItems: "center",
