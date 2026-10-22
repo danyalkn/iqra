@@ -23,6 +23,7 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 
 import { Elevation, Radius, SCRIM } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 import { useWindowInsets } from "@/hooks/use-window-insets";
 
@@ -72,6 +73,7 @@ export function Sheet({
   dragAnywhere?: boolean;
 }) {
   const c = useTheme();
+  const dark = useColorScheme() === "dark";
   const insets = useWindowInsets();
   const { height: windowH } = useWindowDimensions();
   // `render` = open or mid-exit. The previous-open value is adjusted during
@@ -178,7 +180,17 @@ export function Sheet({
     >
       {/* Rounded clip lives on an inner view: overflow hidden on the shadow
           view would clip the iOS shadow. */}
-      <Animated.View style={[styles.panelInner, { backgroundColor: c.canvas }, innerStyle]}>
+      <Animated.View
+        style={[
+          styles.panelInner,
+          { backgroundColor: c.canvas },
+          // The web's shadow-e3 is invisible on black, so in dark mode the
+          // near-black paper met the dimmed page with no edge: a hairline
+          // traces the top instead.
+          dark && [styles.darkEdge, { borderColor: c.border }],
+          innerStyle,
+        ]}
+      >
         {dragAnywhere ? handle : <GestureDetector gesture={pan}>{handle}</GestureDetector>}
         {children}
       </Animated.View>
@@ -236,6 +248,9 @@ const styles = StyleSheet.create({
     // off the top (tall forms: the log sheet, Edit profile with the keyboard).
     flexShrink: 1,
   },
+  // All four sides so the rounded corners are traced too (a top-only border
+  // stops where the corners start); the others sit on the screen edges.
+  darkEdge: { borderWidth: StyleSheet.hairlineWidth },
   handleZone: { alignItems: "center", paddingTop: 12, paddingBottom: 4 },
   handle: { width: 40, height: 6, borderRadius: 3 },
 });
