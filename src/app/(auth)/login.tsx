@@ -1,14 +1,7 @@
 import { Eye, EyeOff } from "lucide-react-native";
 import { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppMark } from "@/components/AppMark";
@@ -20,6 +13,10 @@ import { isSupabaseConfigured, supabase } from "@/supabase/client";
 
 type Mode = "signin" | "signup";
 
+/** Keyboard up, the focused field keeps this much room under it: enough for
+ *  the next field or the submit button to show on a small phone too. */
+const FIELD_ROOM = 88;
+
 /**
  * Ported from reference/web-pwa/app/login/LoginForm.tsx. Email + password
  * only (docs/DECISIONS.md § Auth): no OTP, no emailed reset link, paste
@@ -27,6 +24,11 @@ type Mode = "signin" | "signup";
  * member signed out everywhere gets a temporary one from the owner first.
  * On success the session provider sees SIGNED_IN and the root gate moves
  * to onboarding or the tabs; nothing navigates here.
+ *
+ * Keyboard: keyboard-controller's KeyboardAwareScrollView on both
+ * platforms. RN's KeyboardAvoidingView only worked on iOS: under
+ * KeyboardProvider the Android window never resizes, so the keyboard
+ * covered Create account.
  */
 export default function LoginScreen() {
   const c = useTheme();
@@ -101,133 +103,130 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScrollView
       style={[styles.root, { backgroundColor: c.canvas }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + 48, paddingBottom: insets.bottom + 24 },
+      ]}
+      keyboardShouldPersistTaps="handled"
+      bottomOffset={FIELD_ROOM}
     >
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + 48, paddingBottom: insets.bottom + 24 },
-        ]}
-        keyboardShouldPersistTaps="handled"
-      >
-        {!configured && (
-          <View style={[styles.warn, { backgroundColor: c.warnTint, borderColor: c.warn }]}>
-            <Text style={[Type.footnote, { color: c.foreground }]}>
-              {"Supabase isn't configured yet. Copy .env.example to .env and restart the dev server."}
-            </Text>
-          </View>
-        )}
+      {!configured && (
+        <View style={[styles.warn, { backgroundColor: c.warnTint, borderColor: c.warn }]}>
+          <Text style={[Type.footnote, { color: c.foreground }]}>
+            {"Supabase isn't configured yet. Copy .env.example to .env and restart the dev server."}
+          </Text>
+        </View>
+      )}
 
-        <AppMark />
-        <Text style={[Type.display, styles.title, { color: c.foreground }]}>
-          {mode === "signin" ? "Welcome to Iqra" : "Create your account"}
-        </Text>
-        <Text style={[Type.callout, styles.subtitle, { color: c.muted }]}>
-          {mode === "signin"
-            ? "Private Quran-study accountability for you and your circle."
-            : "Sign up with an email and a password. You'll set your name next."}
-        </Text>
+      <AppMark />
+      <Text style={[Type.display, styles.title, { color: c.foreground }]}>
+        {mode === "signin" ? "Welcome to Iqra" : "Create your account"}
+      </Text>
+      <Text style={[Type.callout, styles.subtitle, { color: c.muted }]}>
+        {mode === "signin"
+          ? "Private Quran-study accountability for you and your circle."
+          : "Sign up with an email and a password. You'll set your name next."}
+      </Text>
 
-        <View style={styles.fields}>
+      <View style={styles.fields}>
+        <Input
+          keyboardType="email-address"
+          inputMode="email"
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="email"
+          textContentType="emailAddress"
+          autoFocus
+          accessibilityLabel="Email"
+          placeholder="you@email.com"
+          value={email}
+          onChangeText={setEmail}
+        />
+        {mode === "signup" && (
           <Input
             keyboardType="email-address"
             inputMode="email"
             autoCapitalize="none"
             autoCorrect={false}
-            autoComplete="email"
-            textContentType="emailAddress"
-            autoFocus
-            accessibilityLabel="Email"
-            placeholder="you@email.com"
-            value={email}
-            onChangeText={setEmail}
+            autoComplete="off"
+            accessibilityLabel="Confirm email"
+            placeholder="Confirm email"
+            value={confirmEmail}
+            onChangeText={setConfirmEmail}
           />
-          {mode === "signup" && (
-            <Input
-              keyboardType="email-address"
-              inputMode="email"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="off"
-              accessibilityLabel="Confirm email"
-              placeholder="Confirm email"
-              value={confirmEmail}
-              onChangeText={setConfirmEmail}
-            />
-          )}
-          <View>
-            <Input
-              secureTextEntry={!showPw}
-              autoCapitalize="none"
-              autoComplete={mode === "signin" ? "current-password" : "new-password"}
-              textContentType={mode === "signin" ? "password" : "newPassword"}
-              accessibilityLabel="Password"
-              placeholder="Password"
-              value={password}
-              onChangeText={setPassword}
-              style={styles.pwInput}
-              onSubmitEditing={mode === "signin" ? submit : undefined}
-            />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={showPw ? "Hide password" : "Show password"}
-              onPress={() => setShowPw((v) => !v)}
-              hitSlop={8}
-              style={styles.eye}
-            >
-              {showPw ? <EyeOff size={20} color={c.faint} /> : <Eye size={20} color={c.faint} />}
-            </Pressable>
-          </View>
-          {mode === "signup" && (
-            <Input
-              secureTextEntry={!showPw}
-              autoCapitalize="none"
-              autoComplete="new-password"
-              textContentType="newPassword"
-              accessibilityLabel="Confirm password"
-              placeholder="Confirm password"
-              value={confirm}
-              onChangeText={setConfirm}
-              onSubmitEditing={submit}
-            />
-          )}
-        </View>
-
-        {error && <Text style={[Type.footnote, styles.message, { color: c.danger }]}>{error}</Text>}
-        {notice && (
-          <Text
-            style={[
-              Type.footnote,
-              styles.message,
-              styles.notice,
-              { color: c.foreground, backgroundColor: c.accentTint },
-            ]}
-          >
-            {notice}
-          </Text>
         )}
+        <View>
+          <Input
+            secureTextEntry={!showPw}
+            autoCapitalize="none"
+            autoComplete={mode === "signin" ? "current-password" : "new-password"}
+            textContentType={mode === "signin" ? "password" : "newPassword"}
+            accessibilityLabel="Password"
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            style={styles.pwInput}
+            onSubmitEditing={mode === "signin" ? submit : undefined}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={showPw ? "Hide password" : "Show password"}
+            onPress={() => setShowPw((v) => !v)}
+            hitSlop={8}
+            style={styles.eye}
+          >
+            {showPw ? <EyeOff size={20} color={c.faint} /> : <Eye size={20} color={c.faint} />}
+          </Pressable>
+        </View>
+        {mode === "signup" && (
+          <Input
+            secureTextEntry={!showPw}
+            autoCapitalize="none"
+            autoComplete="new-password"
+            textContentType="newPassword"
+            accessibilityLabel="Confirm password"
+            placeholder="Confirm password"
+            value={confirm}
+            onChangeText={setConfirm}
+            onSubmitEditing={submit}
+          />
+        )}
+      </View>
 
-        <Button fullWidth loading={loading} onPress={submit} style={styles.submit}>
-          {mode === "signin" ? "Sign in" : "Create account"}
-        </Button>
-
-        <Pressable accessibilityRole="button" onPress={toggleMode} style={styles.toggle}>
-          <Text style={[Type.subhead, { color: c.muted, textAlign: "center" }]}>
-            {mode === "signin" ? "New here? " : "Already have an account? "}
-            <Text style={{ color: c.accent, fontWeight: "600" }}>
-              {mode === "signin" ? "Create an account" : "Sign in"}
-            </Text>
-          </Text>
-        </Pressable>
-
-        <Text style={[Type.footnote, styles.footer, { color: c.faint }]}>
-          Stay signed in across launches. Forgot your password? Ask the group owner for a
-          temporary one, then set your own in Profile.
+      {error && <Text style={[Type.footnote, styles.message, { color: c.danger }]}>{error}</Text>}
+      {notice && (
+        <Text
+          style={[
+            Type.footnote,
+            styles.message,
+            styles.notice,
+            { color: c.foreground, backgroundColor: c.accentTint },
+          ]}
+        >
+          {notice}
         </Text>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      )}
+
+      <Button fullWidth loading={loading} onPress={submit} style={styles.submit}>
+        {mode === "signin" ? "Sign in" : "Create account"}
+      </Button>
+
+      <Pressable accessibilityRole="button" onPress={toggleMode} style={styles.toggle}>
+        <Text style={[Type.subhead, { color: c.muted, textAlign: "center" }]}>
+          {mode === "signin" ? "New here? " : "Already have an account? "}
+          <Text style={{ color: c.accent, fontWeight: "600" }}>
+            {mode === "signin" ? "Create an account" : "Sign in"}
+          </Text>
+        </Text>
+      </Pressable>
+
+      <Text style={[Type.footnote, styles.footer, { color: c.faint }]}>
+        Stay signed in across launches. Forgot your password? Ask the group owner for a
+        temporary one, then set your own in Profile.
+      </Text>
+    </KeyboardAwareScrollView>
   );
 }
 

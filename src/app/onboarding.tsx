@@ -1,12 +1,6 @@
 import { useRef, useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ModeStep } from "@/components/onboarding/ModeStep";
@@ -101,62 +95,63 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
+    // keyboard-controller's scroll view on both platforms: RN's
+    // KeyboardAvoidingView only moved on iOS (the Android window never
+    // resizes under KeyboardProvider), so the name field's keyboard left
+    // Continue unreachable there.
+    <KeyboardAwareScrollView
       style={[styles.root, { backgroundColor: c.canvas }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + 56, paddingBottom: insets.bottom + 40 },
+      ]}
+      keyboardShouldPersistTaps="handled"
+      bottomOffset={24}
     >
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + 56, paddingBottom: insets.bottom + 40 },
-        ]}
-        keyboardShouldPersistTaps="handled"
+      {/* progress */}
+      <Text style={[Type.footnote, styles.caption, { color: c.faint }]}>
+        Step {step + 1} of 2
+      </Text>
+
+      {step === 0 && (
+        <>
+          <ModeStep mode={mode} onChange={setMode} />
+          <View style={styles.actions}>
+            <Button fullWidth disabled={!mode} onPress={() => setStep(1)}>
+              Continue
+            </Button>
+          </View>
+        </>
+      )}
+
+      {step === 1 && (
+        <>
+          <ProfileStep draft={draft} onChange={patch} />
+          {error && (
+            <Text style={[Type.footnote, styles.error, { color: c.danger }]}>{error}</Text>
+          )}
+          <View style={[styles.actions, styles.actionRow]}>
+            <Button variant="secondary" disabled={saving} onPress={() => setStep(0)}>
+              Back
+            </Button>
+            <Button fullWidth loading={saving} onPress={saveProfile} style={styles.grow}>
+              Continue
+            </Button>
+          </View>
+        </>
+      )}
+
+      {/* Escape hatch for a wrong account (kept from the Phase 0 stub). */}
+      <Button
+        variant="ghost"
+        size="md"
+        disabled={saving}
+        onPress={() => void signOut()}
+        style={styles.signOut}
       >
-        {/* progress */}
-        <Text style={[Type.footnote, styles.caption, { color: c.faint }]}>
-          Step {step + 1} of 2
-        </Text>
-
-        {step === 0 && (
-          <>
-            <ModeStep mode={mode} onChange={setMode} />
-            <View style={styles.actions}>
-              <Button fullWidth disabled={!mode} onPress={() => setStep(1)}>
-                Continue
-              </Button>
-            </View>
-          </>
-        )}
-
-        {step === 1 && (
-          <>
-            <ProfileStep draft={draft} onChange={patch} />
-            {error && (
-              <Text style={[Type.footnote, styles.error, { color: c.danger }]}>{error}</Text>
-            )}
-            <View style={[styles.actions, styles.actionRow]}>
-              <Button variant="secondary" disabled={saving} onPress={() => setStep(0)}>
-                Back
-              </Button>
-              <Button fullWidth loading={saving} onPress={saveProfile} style={styles.grow}>
-                Continue
-              </Button>
-            </View>
-          </>
-        )}
-
-        {/* Escape hatch for a wrong account (kept from the Phase 0 stub). */}
-        <Button
-          variant="ghost"
-          size="md"
-          disabled={saving}
-          onPress={() => void signOut()}
-          style={styles.signOut}
-        >
-          Sign out
-        </Button>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        Sign out
+      </Button>
+    </KeyboardAwareScrollView>
   );
 }
 
