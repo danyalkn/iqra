@@ -650,19 +650,15 @@ export default function StatsScreen() {
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   useReselectScrollToTop(scrollRef);
   const recapReady = wantRecap && loadState === "ready" && scope === "mine" && recapY != null;
-  const insetTop = insets.top;
   useEffect(() => {
     if (!recapReady || recapY == null) return;
     // After paint, so layout is settled before we scroll (web: rAF).
     const id = requestAnimationFrame(() => {
-      // recapY is measured inside the content container, and scrollTo takes
-      // a content offset whose 0 is the screen top on both platforms: the
-      // view runs under the status bar, content insets are off, and the
-      // container pads by insetTop itself. Subtract the inset so the margin
-      // is kept below the safe area; 0 is the resting (fully scrolled up)
-      // offset.
+      // recapY is measured inside the content container and the scroll view
+      // starts below the status bar (the root pads insets.top), so the
+      // offset is recapY less the margin; 0 is the resting offset.
       scrollRef.current?.scrollTo({
-        y: Math.max(0, recapY - insetTop - RECAP_SCROLL_MARGIN),
+        y: Math.max(0, recapY - RECAP_SCROLL_MARGIN),
         animated: true,
       });
       // Consume the link: setParams merges, and an undefined value reads
@@ -670,7 +666,7 @@ export default function StatsScreen() {
       router.setParams({ section: undefined });
     });
     return () => cancelAnimationFrame(id);
-  }, [recapReady, recapY, insetTop]);
+  }, [recapReady, recapY]);
   // Not in a circle: nothing to scroll to, drop the link all the same.
   useEffect(() => {
     if (wantRecap && membership === null) router.setParams({ section: undefined });
@@ -827,37 +823,38 @@ export default function StatsScreen() {
   // react-native-screens' automatic content insets: on iOS 26 the tab
   // screen gets none, which left the header under the clock and the last
   // row under the tab bar. So insets are off (contentInsetAdjustmentBehavior
-  // "never") and the container pads them itself, as Today's root View does.
-  // Top: the status bar / Dynamic Island on both platforms. Bottom: the
-  // screen runs under the floating tab bar on both platforms (iOS: the
-  // system Liquid Glass bar; Android: our glass bar), so the bar clearance
-  // (useTabBarClearance) is added to the 40 of air.
-  const insetPad = {
-    paddingTop: insets.top,
-    paddingBottom: 40 + barClearance,
-  };
+  // "never"). Top: the root View pads the status bar / Dynamic Island and
+  // the scroll view sits inside it, as on Today, Feed and Profile; padding
+  // the scroll content instead let scrolled cards run under the clock.
+  // Bottom: the screen runs under the floating tab bar on both platforms
+  // (iOS: the system Liquid Glass bar; Android: our glass bar), so the bar
+  // clearance (useTabBarClearance) is added to the 40 of air.
+  const rootPad = { paddingTop: insets.top, backgroundColor: c.canvas };
+  const insetPad = { paddingBottom: 40 + barClearance };
 
   if (membership === null) {
     return (
-      <ScrollView
-        style={[styles.root, { backgroundColor: c.canvas }]}
-        // Same insets as the main list below (see insetPad).
-        contentInsetAdjustmentBehavior="never"
-        contentContainerStyle={[styles.placeholder, insetPad]}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefreshMembership}
-            tintColor={c.muted}
+      <View style={[styles.root, rootPad]}>
+        <ScrollView
+          style={styles.root}
+          // Same insets as the main list below (see insetPad).
+          contentInsetAdjustmentBehavior="never"
+          contentContainerStyle={[styles.placeholder, insetPad]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefreshMembership}
+              tintColor={c.muted}
+            />
+          }
+        >
+          <Placeholder
+            icon={ChartColumnBig}
+            title="Insights"
+            note="You’re not in a circle yet. Once you’re added and start logging, your charts show up here."
           />
-        }
-      >
-        <Placeholder
-          icon={ChartColumnBig}
-          title="Insights"
-          note="You’re not in a circle yet. Once you’re added and start logging, your charts show up here."
-        />
-      </ScrollView>
+        </ScrollView>
+      </View>
     );
   }
 
@@ -868,10 +865,10 @@ export default function StatsScreen() {
   const group = scope === "group";
 
   return (
-    <>
+    <View style={[styles.root, rootPad]}>
       <ScrollView
         ref={scrollRef}
-        style={[styles.root, { backgroundColor: c.canvas }]}
+        style={styles.root}
         // Insets padded by the container, never by the system (see insetPad).
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={[styles.content, insetPad]}
@@ -1066,14 +1063,14 @@ export default function StatsScreen() {
 
       {/* Where these numbers come from - totals only count what was logged. */}
       <CoverageSheet open={showCoverage} onClose={() => setShowCoverage(false)} />
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
   placeholder: { flexGrow: 1 },
-  // Top and bottom padding come from insetPad (safe area + 40 at the end).
+  // The top inset is the root's (rootPad); the bottom comes from insetPad.
   content: { paddingHorizontal: 20, gap: 16 },
   // Web: pt-7 pb-3. The content gap (16) stands in for the bottom padding.
   header: { paddingTop: 28 },
