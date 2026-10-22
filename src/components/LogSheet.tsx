@@ -68,6 +68,15 @@ function startFromLabel(label: string): number | null {
   return label === NO_START ? null : juzPageFromLabel(label);
 }
 
+/** Arabic-Indic (U+0660..) and Eastern Arabic-Indic (U+06F0..) digits as
+ *  ASCII, and the Arabic decimal separator as a comma. */
+function asciiNumber(v: string): string {
+  return v
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/\u066b/g, ",");
+}
+
 /** "Juz 3 · p.3, 2nd half" (+ the amount when the label doesn't say it). */
 function portionSummary(juz: number, start: number | null, pages: number): string {
   if (start == null) return `Juz ${juz} · ${pagesPhrase(pages)}`;
@@ -377,11 +386,15 @@ function LogForm({
         : `Adds your pages onto p.${lastReadPage}.`;
 
   // Numbers only - up to 2 decimal places for pages, integer for the page no.
+  // Keypads in comma-decimal regions (Android's decimal pad always) type
+  // "1,5", and Arabic-script keypads type ١٢ or ۱۲: read them as 1.5 and 12.
   const onPagesReadChange = (v: string) => {
-    if (/^\d*\.?\d{0,2}$/.test(v)) setPagesRead(v);
+    const n = asciiNumber(v).replace(",", ".");
+    if (/^\d*\.?\d{0,2}$/.test(n)) setPagesRead(n);
   };
   const onStoppedChange = (v: string) => {
-    if (/^\d*$/.test(v)) setStoppedAt(v);
+    const n = asciiNumber(v);
+    if (/^\d*$/.test(n)) setStoppedAt(n);
   };
 
   const summary = reading
