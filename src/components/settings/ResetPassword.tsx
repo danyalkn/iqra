@@ -3,7 +3,7 @@ import { useRef, useState, type ComponentRef } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { NavRow } from "@/components/profile/NavRow";
-import { Button, Card, Input, Sheet, SheetScroll } from "@/components/ui";
+import { Button, Card, Input, Sheet, SheetFooter, SheetScroll } from "@/components/ui";
 import { Radius, Type } from "@/constants/theme";
 import { setPassword } from "@/data/account";
 import { useTheme } from "@/hooks/use-theme";
@@ -84,9 +84,6 @@ export function ResetPassword() {
               <Text style={[Type.callout, styles.body, { color: c.muted }]}>
                 Use your new password next time you sign in, here or on the web.
               </Text>
-              <Button fullWidth style={styles.actionsTop} onPress={() => setOpen(false)}>
-                Done
-              </Button>
             </>
           ) : (
             <>
@@ -141,11 +138,19 @@ export function ResetPassword() {
                   onSubmitEditing={() => void save()}
                 />
               </View>
-
+            </>
+          )}
+        </SheetScroll>
+        <SheetFooter>
+          {done ? (
+            <Button fullWidth style={styles.actionsTop} onPress={() => setOpen(false)}>
+              Done
+            </Button>
+          ) : (
+            <>
               {error && (
                 <Text style={[Type.footnote, styles.error, { color: c.danger }]}>{error}</Text>
               )}
-
               <View style={[styles.actions, styles.actionsTop]}>
                 <Button
                   variant="secondary"
@@ -167,7 +172,7 @@ export function ResetPassword() {
               </View>
             </>
           )}
-        </SheetScroll>
+        </SheetFooter>
       </Sheet>
     </View>
   );

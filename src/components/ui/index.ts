@@ -6,5 +6,5 @@ export { Chip, ChipText } from "./Chip";
 export { FieldLabel, Input, Textarea, TimeInput } from "./Field";
 export { SegmentedControl, type Segment } from "./SegmentedControl";
 export { Sheet } from "./Sheet";
-export { SheetScroll } from "./SheetScroll";
+export { SheetFooter, SheetScroll } from "./SheetScroll";
 export { Switch } from "./Switch";

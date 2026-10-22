@@ -1,7 +1,15 @@
-import { createContext, useCallback, useContext, useRef, type ComponentRef } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useRef,
+  type ComponentRef,
+  type ReactNode,
+} from "react";
 import {
   ScrollView,
   StyleSheet,
+  View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type ScrollViewProps,
@@ -110,6 +118,17 @@ export function SheetScroll({
   );
 }
 
+/**
+ * A sheet form's error line and primary actions, placed after its
+ * SheetScroll rather than inside it: the scroll gives up the room when the
+ * keyboard leaves too little, so Save stays on screen and one tap saves with
+ * the keyboard still up. Same 20 pt sides as the forms.
+ */
+export function SheetFooter({ children }: { children: ReactNode }) {
+  return <View style={styles.footer}>{children}</View>;
+}
+
 const styles = StyleSheet.create({
   shrink: { flexShrink: 1 },
+  footer: { paddingHorizontal: 20 },
 });

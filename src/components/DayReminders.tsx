@@ -31,6 +31,7 @@ import {
   Input,
   SegmentedControl,
   Sheet,
+  SheetFooter,
   SheetScroll,
   TimeInput,
 } from "@/components/ui";
@@ -595,12 +596,13 @@ export function DayReminderSheet({
             </View>
           )}
 
+        </SheetScroll>
+        <SheetFooter>
           {error && <Text style={[Type.footnote, styles.mt3, { color: c.danger }]}>{error}</Text>}
-
           <Button fullWidth style={styles.mt6} onPress={save} loading={busy}>
             Set reminder
           </Button>
-        </SheetScroll>
+        </SheetFooter>
     </Sheet>
   );
 }

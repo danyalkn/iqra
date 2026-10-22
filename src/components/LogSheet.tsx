@@ -17,6 +17,7 @@ import {
   Input,
   SegmentedControl,
   Sheet,
+  SheetFooter,
   SheetScroll,
   Switch,
   Textarea,
@@ -724,12 +725,12 @@ function LogForm({
 
       {/* Pinned under the scroll so Save (and why it failed) stays on screen
           when the keyboard leaves the form too little room. */}
-      <View style={styles.footer}>
+      <SheetFooter>
         {error && <Text style={[Type.footnote, styles.error, { color: c.danger }]}>{error}</Text>}
         <Button fullWidth style={styles.save} onPress={save}>
           {editing ? "Save changes" : "Save entry"}
         </Button>
-      </View>
+      </SheetFooter>
     </>
   );
 }
@@ -772,7 +773,6 @@ function StartHint() {
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingTop: 8 },
-  footer: { paddingHorizontal: 20 },
   header: {
     flexDirection: "row",
     alignItems: "center",

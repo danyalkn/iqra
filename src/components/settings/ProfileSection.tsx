@@ -11,6 +11,7 @@ import {
   Input,
   SegmentedControl,
   Sheet,
+  SheetFooter,
   SheetScroll,
 } from "@/components/ui";
 import { Type } from "@/constants/theme";
@@ -190,10 +191,11 @@ export function ProfileSection() {
               </View>
             </View>
 
+          </SheetScroll>
+          <SheetFooter>
             {error && (
               <Text style={[Type.footnote, styles.error, { color: c.danger }]}>{error}</Text>
             )}
-
             <View style={styles.actions}>
               <Button variant="secondary" onPress={() => setOpen(false)}>
                 Cancel
@@ -202,7 +204,7 @@ export function ProfileSection() {
                 Save
               </Button>
             </View>
-          </SheetScroll>
+          </SheetFooter>
 
         {/* Rendered inside the sheet so it stacks as a nested Modal on both
             platforms (a sibling Modal would fight the open one on iOS). */}

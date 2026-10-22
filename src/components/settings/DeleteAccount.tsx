@@ -2,7 +2,7 @@ import { AlertTriangle, Trash2 } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { Button, Input, Sheet, SheetScroll } from "@/components/ui";
+import { Button, Input, Sheet, SheetFooter, SheetScroll } from "@/components/ui";
 import { Radius, Type } from "@/constants/theme";
 import { deleteAccount } from "@/data/account";
 import { useTheme } from "@/hooks/use-theme";
@@ -77,11 +77,11 @@ export function DeleteAccount() {
               autoCorrect={false}
               returnKeyType="done"
             />
-
+          </SheetScroll>
+          <SheetFooter>
             {error && (
               <Text style={[Type.footnote, styles.error, { color: c.danger }]}>{error}</Text>
             )}
-
             <View style={styles.actions}>
               <Button
                 variant="secondary"
@@ -102,7 +102,7 @@ export function DeleteAccount() {
                 Delete forever
               </Button>
             </View>
-          </SheetScroll>
+          </SheetFooter>
       </Sheet>
     </View>
   );
