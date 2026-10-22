@@ -66,7 +66,9 @@ export function ReadingWeeksCard({
             <Text style={[Type.display, styles.tabular, { color: c.foreground }]}>
               {stats.thisWeek}
             </Text>
-            <Text style={[Type.callout, { color: c.muted }]}>juz this week so far</Text>
+            <Text style={[Type.callout, styles.rest, { color: c.muted }]}>
+              juz this week so far
+            </Text>
           </View>
           <Text style={[Type.footnote, styles.sub, { color: c.faint }]}>{averageLine}</Text>
 
@@ -97,7 +99,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
-  title: { fontWeight: "600" },
+  // flex 1 / flexGrow 1 on a label in a row: Android (RN 0.88) can draw a
+  // text that sits at its own measured width a hair narrower than it needs
+  // and wrap its last word out of sight ("juz this week so far" lost "far",
+  // RecapCard's "Your week" showed as "Your"). Taking the row's free width avoids it.
+  title: { fontWeight: "600", flex: 1 },
   bigRow: {
     marginTop: 12,
     flexDirection: "row",
@@ -106,6 +112,7 @@ const styles = StyleSheet.create({
     columnGap: 8,
     rowGap: 2,
   },
+  rest: { flexGrow: 1 },
   tabular: { fontVariant: ["tabular-nums"] },
   sub: { marginTop: 2 },
   chart: { marginTop: 12, marginBottom: 6 },

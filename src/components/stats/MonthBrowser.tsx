@@ -70,7 +70,7 @@ export function MonthBrowser({
           <Text style={[Type.callout, styles.monthName, { color: c.foreground }]} numberOfLines={1}>
             {monthName}
           </Text>
-          <Text style={[Type.caption, { color: c.faint }]}>
+          <Text style={[Type.caption, styles.centered, { color: c.faint }]}>
             {isThisMonth ? `1–${+today.slice(8, 10)} so far` : "full month"}
           </Text>
         </View>
@@ -92,7 +92,9 @@ export function MonthBrowser({
         <Text style={[Type.callout, { color: c.muted }]}>
           pages {group ? "read together" : "read"}
         </Text>
-        <Text style={[Type.footnote, { color: c.faint }]}>≈ {Math.round(pages / 20)} juz</Text>
+        <Text style={[Type.footnote, styles.rest, { color: c.faint }]}>
+          ≈ {Math.round(pages / 20)} juz
+        </Text>
       </View>
       {/* Name the month in both clauses - the active-day count belongs to
           the selected month, not the comparison month. */}
@@ -138,8 +140,13 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   disabled: { opacity: 0.3 },
-  monthText: { flex: 1, minWidth: 0, alignItems: "center" },
-  monthName: { fontWeight: "600" },
+  // Full-width lines centred by textAlign, not alignItems: Android can draw
+  // a text at its own measured width a hair too narrow and wrap its last
+  // word away (RecapCard's "Your week" showed as "Your").
+  monthText: { flex: 1, minWidth: 0 },
+  monthName: { fontWeight: "600", textAlign: "center" },
+  centered: { textAlign: "center" },
+  rest: { flexGrow: 1 },
   bigRow: {
     marginTop: 16,
     flexDirection: "row",

@@ -59,7 +59,7 @@ export function RecapCard({
 
         <View style={styles.bigRow}>
           <Text style={[Type.display, styles.tabular, { color: c.foreground }]}>{pages}</Text>
-          <Text style={[Type.callout, { color: c.muted }]}>
+          <Text style={[Type.callout, styles.rest, { color: c.muted }]}>
             {pages === 1 ? "page" : "pages"} · {recap.activeDays} of 7 days
           </Text>
         </View>
@@ -114,7 +114,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
-  title: { fontWeight: "600" },
+  // flex 1 / flexGrow 1 on a label in a row: Android (RN 0.88) can draw a
+  // text that sits at its own measured width a hair narrower than it needs
+  // and wrap its last word out of sight ("Your week" showed as "Your", "juz
+  // this week so far" lost "far"). Taking the row's free width avoids it.
+  title: { fontWeight: "600", flex: 1 },
   bigRow: {
     marginTop: 12,
     flexDirection: "row",
@@ -123,6 +127,7 @@ const styles = StyleSheet.create({
     columnGap: 8,
     rowGap: 2,
   },
+  rest: { flexGrow: 1 },
   tabular: { fontVariant: ["tabular-nums"] },
   baseline: { marginTop: 2 },
   days: {

@@ -54,7 +54,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 4,
   },
-  label: { fontWeight: "500", flexShrink: 1 },
+  // flex 1, not flexShrink: Android can draw a label at its own measured
+  // width a hair too narrow and wrap its last word away (RecapCard).
+  label: { fontWeight: "500", flex: 1 },
   info: {
     width: 24,
     height: 24,
