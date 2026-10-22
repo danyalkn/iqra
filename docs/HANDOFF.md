@@ -565,11 +565,13 @@ once Apple approves the entitlement; do not block Phase 3 on it.
   on both platforms (`Sheet`, `SheetScroll`/`SheetFooter`,
   keyboard-controller's KeyboardAwareScrollView), Modals read
   `useWindowInsets`, and a list of smaller visual fixes. Shared lib fix to
-  mirror to the web repo: `getMyMembership` in `src/lib/data.ts` now
-  filters `group_members` to the signed-in user
-  (`.eq("user_id", session.user.id)`). Unfiltered, RLS returned the whole
-  roster and the earliest row (the owner's) won, so every member got the
-  owner's role and the owner-only add-member UI.
+  mirror to the web repo: `getMyMembership(supabase, userId)` in
+  `src/lib/data.ts` now takes the user and filters `group_members` to it
+  (`.eq("user_id", userId)`). Unfiltered, RLS returned the whole roster
+  and the earliest row (the owner's) won, so every member got the owner's
+  role and the owner-only add-member UI. The web should pass the user
+  from its verified `getUser()`; asking `getSession()` inside the helper
+  was tried here first and broke offline launches (see ANDROID.md).
 - Ultracode: good for Phase 1 and 2 (independent screens). Not for Phase 0,
   3, or 4, which need one consistent thread of decisions.
 - Model guidance from the owner (revised 2026-10-16): the main session runs

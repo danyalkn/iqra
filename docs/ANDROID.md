@@ -518,7 +518,7 @@ test push, and the web push row cleanup.
 ## Keyboard and layout pass (2026-10-21, both platforms)
 
 Owner request after the build 6 run: fix the two items above and every
-other visual or keyboard bug, both platforms. 24 commits, e41d9da..06474a2,
+other visual or keyboard bug, both platforms. 34 commits, e41d9da..f4efdbd,
 JS only (no native change, so both 1.2.0 binaries can take it by EAS
 Update; **nothing has been published yet**). Verified on the `iqra-play`
 emulator (debug build on Metro) and the iPhone 16 Pro simulator (fresh
@@ -580,25 +580,56 @@ What was wrong and what changed (the commit bodies have the detail):
   and chat's copy read the earliest-joined `group_members` row without
   filtering to the user, so every member who joined after the owner got
   the owner's role and saw the owner-only "Add member" search (the
-  server refused it). Both now filter on the session's user id; the web
-  repo needs the same filter (HANDOFF working notes).
+  server refused it). Both now filter on the user id the caller passes
+  (`getMyMembership(supabase, userId)`), not on `auth.getSession()`,
+  which offline with an expired token says "no session" and would have
+  cached "not in a circle"; the web repo needs the same filter (HANDOFF
+  working notes).
+
+Adversarial review (Opus, after the sweeps) found that offline
+membership regression and five smaller faults, all fixed before
+shipping: Reset password and Delete account needed `dragAnywhere={false}`
+around their new scroll; `useWindowInsets` now reads the window insets
+at the root (`WindowInsetsProvider` in the root layout) because the
+launch metrics are null for a process started by a reminder button;
+initials keep combining marks (Arabic harakat); SheetScroll's reveal is
+clamped to the content end (iOS's scrollTo does not clamp); the chat menu
+stays invisible until it is measured. Also after the sweeps: a guard that
+drops a long-press landing on a recycled FlashList row (the one stray
+menu seen on iOS), sign-up keeping 112 pt under the focused field so
+iOS's taller "Use Strong Password?" panel no longer covers Create
+account, and sign-in/onboarding padding their root for the status bar.
+A final regression run on both devices with a second throwaway (deleted,
+zero rows) passed: sign-up with Next/Go, onboarding with the keyboard
+up, log with a note, chat overlay with the keyboard up and down, 34 pt
+sheet bottoms on iOS.
 
 Left as is, on purpose:
 
-- iOS's own "Use Strong Password?" panel on sign-up is taller than the
-  keyboard and overlaps the bottom 15 pt of Create account; the button
-  still works and the normal keyboard leaves it clear.
 - The chat overlay dims the pressed bubble with everything else (web
   parity); the pill and menu sit beside it.
 - With the largest text sizes and the keyboard up, the log sheet's form
   scrolls inside a short space; nothing is unreachable.
-- Once on iOS a long-press opened the menu for the neighbouring message
-  right after the chat loaded; it did not happen again in six more
-  tries (keyboard up and down).
+- Not run: Android 10 and older (keyboard-controller tracks the
+  keyboard through the app window there; no image on this machine) and
+  iPads (not supported). Worst case on old Android is the old behaviour,
+  a sheet that does not move.
 
-To ship it: `npx eas-cli@latest update --channel production --environment production --platform ios --message "..." --non-interactive`
-for iOS 1.2.0, and the same with `--channel preview --environment preview --platform android`
-for build 6 (both runtime 1.2.0). Owner's call when.
+Compatibility: every native module this code touches has the same
+version in iOS TestFlight 1.0.0 (3) as now (keyboard-controller 1.22.7,
+RN 0.88.0, reanimated, worklets, safe-area-context; expo-status-bar's
+StatusBar.setStyle is RN core's setBarStyle), no package, plugin, patch
+or app.json change in the range, and the iOS export has 0 `ExpoBlur`.
+
+To ship it (owner's call when), three EAS Updates:
+
+1. iOS TestFlight 1.0.0, what the circle runs today: set app.json
+   `version` to `1.0.0` (the runtime follows it), then
+   `npx eas-cli@latest update --channel production --environment production --platform ios --message "..." --non-interactive`,
+   then restore `1.2.0` (no commit), as for update group 197beb34.
+2. iOS 1.2.0 (8), once it is on phones: the same command at `1.2.0`.
+3. Android build 6 (1.2.0):
+   `npx eas-cli@latest update --channel preview --environment preview --platform android --message "..." --non-interactive`.
 
 ## Kickoff brief for the next session (paste as the first message)
 
