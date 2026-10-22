@@ -10,11 +10,15 @@ import {
 
 import { useTheme } from "@/hooks/use-theme";
 
+/** First letters of the first and last words. Words are runs of letters or
+ *  digits, so "Aisha (demo)" gives "AD", not the web's "A(". */
 function initialsFrom(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  const [first, ...rest] = name.match(/[\p{L}\p{N}]+/gu) ?? [];
+  if (!first) return "?";
+  const last = rest.at(-1);
+  // Array.from splits by code point, so a letter outside the BMP stays whole.
+  const head = (word: string, n: number) => Array.from(word).slice(0, n).join("");
+  return (last ? head(first, 1) + head(last, 1) : head(first, 2)).toUpperCase();
 }
 
 export function Avatar({
