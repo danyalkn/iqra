@@ -1,6 +1,6 @@
 import { Eye, EyeOff, KeyRound } from "lucide-react-native";
-import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useRef, useState, type ComponentRef } from "react";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { NavRow } from "@/components/profile/NavRow";
 import { Button, Card, Input, Sheet, SheetScroll } from "@/components/ui";
@@ -22,6 +22,7 @@ export function ResetPassword() {
   const [password, setPw] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const confirmRef = useRef<ComponentRef<typeof TextInput>>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -108,6 +109,8 @@ export function ResetPassword() {
                     onChangeText={setPw}
                     style={styles.pwInput}
                     returnKeyType="next"
+                    submitBehavior="submit"
+                    onSubmitEditing={() => confirmRef.current?.focus()}
                   />
                   <Pressable
                     accessibilityRole="button"
@@ -124,6 +127,7 @@ export function ResetPassword() {
                   </Pressable>
                 </View>
                 <Input
+                  ref={confirmRef}
                   secureTextEntry={!showPw}
                   autoCapitalize="none"
                   autoCorrect={false}

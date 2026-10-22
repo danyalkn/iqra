@@ -1,6 +1,6 @@
 import { Eye, EyeOff } from "lucide-react-native";
-import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useRef, useState, type ComponentRef } from "react";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -28,7 +28,8 @@ const FIELD_ROOM = 88;
  * Keyboard: keyboard-controller's KeyboardAwareScrollView on both
  * platforms. RN's KeyboardAvoidingView only worked on iOS: under
  * KeyboardProvider the Android window never resizes, so the keyboard
- * covered Create account.
+ * covered Create account. Return moves to the next field, and the last
+ * one submits.
  */
 export default function LoginScreen() {
   const c = useTheme();
@@ -43,6 +44,9 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const configured = isSupabaseConfigured();
+  const confirmEmailRef = useRef<ComponentRef<typeof TextInput>>(null);
+  const passwordRef = useRef<ComponentRef<typeof TextInput>>(null);
+  const confirmRef = useRef<ComponentRef<typeof TextInput>>(null);
 
   const submit = async () => {
     setError(null);
@@ -143,9 +147,15 @@ export default function LoginScreen() {
           placeholder="you@email.com"
           value={email}
           onChangeText={setEmail}
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() =>
+            (mode === "signup" ? confirmEmailRef : passwordRef).current?.focus()
+          }
         />
         {mode === "signup" && (
           <Input
+            ref={confirmEmailRef}
             keyboardType="email-address"
             inputMode="email"
             autoCapitalize="none"
@@ -155,10 +165,14 @@ export default function LoginScreen() {
             placeholder="Confirm email"
             value={confirmEmail}
             onChangeText={setConfirmEmail}
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => passwordRef.current?.focus()}
           />
         )}
         <View>
           <Input
+            ref={passwordRef}
             secureTextEntry={!showPw}
             autoCapitalize="none"
             autoComplete={mode === "signin" ? "current-password" : "new-password"}
@@ -168,7 +182,11 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             style={styles.pwInput}
-            onSubmitEditing={mode === "signin" ? submit : undefined}
+            returnKeyType={mode === "signin" ? "go" : "next"}
+            submitBehavior={mode === "signin" ? "blurAndSubmit" : "submit"}
+            onSubmitEditing={
+              mode === "signin" ? submit : () => confirmRef.current?.focus()
+            }
           />
           <Pressable
             accessibilityRole="button"
@@ -182,6 +200,7 @@ export default function LoginScreen() {
         </View>
         {mode === "signup" && (
           <Input
+            ref={confirmRef}
             secureTextEntry={!showPw}
             autoCapitalize="none"
             autoComplete="new-password"
@@ -190,6 +209,7 @@ export default function LoginScreen() {
             placeholder="Confirm password"
             value={confirm}
             onChangeText={setConfirm}
+            returnKeyType="go"
             onSubmitEditing={submit}
           />
         )}
